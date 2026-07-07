@@ -114,10 +114,15 @@
     .mission-brief p{ color:var(--ink) !important; }
 
     /* ============ SPLASH ============ */
+    /* sentinel.jpg (optional, same folder) sits under the tint layers; if the
+       file is absent the url() layer simply doesn't paint and the gradient
+       backdrop shows exactly as before. */
     #splash-screen{ position:absolute; inset:0; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center;
         background:
+          linear-gradient(180deg, rgba(5,6,7,0.30) 0%, rgba(5,6,7,0.55) 60%, rgba(5,6,7,0.88) 100%),
           radial-gradient(ellipse at 50% 110%, rgba(255,122,26,0.18), transparent 55%),
           radial-gradient(ellipse at 50% -20%, rgba(79,209,197,0.10), transparent 50%),
+          url('sentinel.jpg') center / cover no-repeat,
           var(--void);
         pointer-events:auto; }
     #splash-screen .splash-grid{ position:absolute; inset:0; opacity:0.14;
@@ -439,7 +444,11 @@ function measureNaturalBBox(object) {
 // SkeletonUtils.clone (NOT Object3D.clone): a plain deep clone leaves each
 // SkinnedMesh's skeleton pointing at the ORIGINAL bones, so the mixer animates
 // nodes the geometry never reads. SkeletonUtils rebinds skinning to the clone.
-function instantiateModel(sourceScene, naturalInfo, targetHeight) {
+// mode 'height' (default): scale so standing height = target — right for humanoids.
+// mode 'max': scale so the DOMINANT axis = target — right for flat/long craft like
+// ZYTHERON_CRAFT.glb (4.56 long x 1.56 tall raw); height-normalizing a flat wing
+// would inflate its span ~3x past the intended silhouette.
+function instantiateModel(sourceScene, naturalInfo, targetHeight, mode) {
     const clone = (THREE.SkeletonUtils && THREE.SkeletonUtils.clone)
         ? THREE.SkeletonUtils.clone(sourceScene)
         : sourceScene.clone(true);
@@ -448,12 +457,20 @@ function instantiateModel(sourceScene, naturalInfo, targetHeight) {
             node.castShadow = true;
             node.receiveShadow = true;
             if (node.material) {
-                node.material = node.material.clone();
-                node.material.envMapIntensity = 1.4;
+                // multi-material meshes ship material ARRAYS — clone element-wise
+                if (Array.isArray(node.material)) {
+                    node.material = node.material.map(m => { const c = m.clone(); c.envMapIntensity = 1.4; return c; });
+                } else {
+                    node.material = node.material.clone();
+                    node.material.envMapIntensity = 1.4;
+                }
             }
         }
     });
-    const scale = targetHeight / naturalInfo.height;
+    const denom = (mode === 'max')
+        ? Math.max(naturalInfo.height, naturalInfo.sizeX, naturalInfo.sizeZ)
+        : naturalInfo.height;
+    const scale = targetHeight / denom;
     clone.scale.setScalar(scale);
     clone.position.set(
         -((naturalInfo.min.x + naturalInfo.max.x) / 2) * scale,
@@ -467,9 +484,14 @@ function instantiateModel(sourceScene, naturalInfo, targetHeight) {
 
 function tintModelEmissive(model, hexColor, intensity) {
     model.traverse((node) => {
-        if (node.isMesh && node.material && node.material.emissive) {
-            node.material.emissive.setHex(hexColor);
-            node.material.emissiveIntensity = (intensity === undefined) ? 1.0 : intensity;
+        if (node.isMesh && node.material) {
+            const mats = Array.isArray(node.material) ? node.material : [node.material];
+            mats.forEach(m => {
+                if (m.emissive) {
+                    m.emissive.setHex(hexColor);
+                    m.emissiveIntensity = (intensity === undefined) ? 1.0 : intensity;
+                }
+            });
         }
     });
 }
@@ -712,6 +734,34 @@ const AudioSys = {
         if (!this.ctx) return;
         this.ambGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.5);
     }
+};
+
+// ---- Optional custom soundtrack: drop a 'sentinel.mp3' next to index.html.
+// If it loads, it replaces the procedural ambient bed; if absent, the synth
+// ambient carries the soundscape exactly as before. No error surfaces either way.
+const BGM = {
+    el: null, playing: false, available: false,
+    init() {
+        if (this.el) return;
+        this.el = new Audio('sentinel.mp3');
+        this.el.loop = true;
+        this.el.volume = 0.35;
+        this.el.preload = 'auto';
+        this.el.addEventListener('canplaythrough', () => { this.available = true; });
+        this.el.addEventListener('error', () => { this.available = false; this.playing = false; });
+    },
+    start() {
+        this.init();
+        const p = this.el.play();
+        if (p && p.then) {
+            p.then(() => {
+                this.playing = true;
+                AudioSys.stopAmbient(); // custom track owns the bed
+            }).catch(() => { this.playing = false; }); // missing file / autoplay block: synth ambient continues
+        }
+    },
+    pause()  { if (this.el && this.playing) this.el.pause(); },
+    resume() { if (this.el && this.playing) this.el.play().catch(() => {}); }
 };
 
 // ============================= PROCEDURAL GROUND TEXTURES =============================
@@ -1117,7 +1167,7 @@ function applyEnvironment(levelData) {
     else buildSnow(envGroup);
 
     setWeather(levelData.weather);
-    AudioSys.setAmbient(levelData.ambientSound);
+    if (!BGM.playing) AudioSys.setAmbient(levelData.ambientSound);
     envMapDirty = true;
 }
 
@@ -1273,7 +1323,7 @@ gltfLoader.load(
     (error) => { console.warn('[SENTINEL] Could not load blue.glb. Falling back to procedural frame.', error); }
 );
 gltfLoader.load(
-    'zytheroncraft.glb',
+    'ZYTHERON_CRAFT.glb',
     (gltf) => {
         try {
             zytheronGLB = gltf.scene;
@@ -1282,7 +1332,7 @@ gltfLoader.load(
         } catch (err) { console.warn('[SENTINEL] zytheroncraft.glb measurement failed.', err); zytheronGLB = null; }
     },
     undefined,
-    (error) => { console.warn('[SENTINEL] Could not load zytheroncraft.glb. Procedural fleet fallback.', error); }
+    (error) => { console.warn('[SENTINEL] Could not load ZYTHERON_CRAFT.glb. Procedural fleet fallback.', error); }
 );
 
 // ============================= INPUT =============================
@@ -1639,8 +1689,12 @@ class Player {
         if (sentinelGLB && sentinelNaturalInfo) {
             const inst = instantiateModel(sentinelGLB, sentinelNaturalInfo, PLAYER_TARGET_HEIGHT);
             this.model = inst.model;
-            // Mixamo exports face +Z; engine convention is -Z-forward (aim dir).
-            inst.wrapper.rotation.y = Math.PI;
+            // blue.glb's authored front already matches the engine's -Z-forward
+            // aim convention -- the earlier Math.PI flip turned the frame to
+            // face AWAY from the shoot direction (same trap as the koru fix:
+            // shootDir comes straight from aimTarget - position, so the visual
+            // rig must align with it directly, no flip).
+            inst.wrapper.rotation.y = 0;
             this.group.add(inst.wrapper);
 
             if (sentinelAnimations && sentinelAnimations.length > 0) {
@@ -1999,12 +2053,19 @@ class Enemy {
         const factionColor = isBoss ? 0x8b5cf6 : tint;
 
         if (zytheronGLB && zytheronNaturalInfo) {
-            const inst = instantiateModel(zytheronGLB, zytheronNaturalInfo, targetHeight);
+            // 'max' mode: ZYTHERON_CRAFT.glb is a flat wing (long Z, short Y) --
+            // its DOMINANT axis, not its height, must equal the fleet silhouette size.
+            const inst = instantiateModel(zytheronGLB, zytheronNaturalInfo, targetHeight, 'max');
             this.craft = inst.wrapper;
             this.craft.rotation.y = Math.PI;
             this.group.add(this.craft);
             tintModelEmissive(inst.model, factionColor, isBoss ? 0.9 : 0.55);
-            inst.model.traverse((n) => { if (n.isMesh && n.material) this.flashTargets.push(n.material); });
+            inst.model.traverse((n) => {
+                if (n.isMesh && n.material) {
+                    const mats = Array.isArray(n.material) ? n.material : [n.material];
+                    mats.forEach(m => this.flashTargets.push(m));
+                }
+            });
             this.usesModel = true;
             this.hoverHeight = targetHeight * 0.42;
             this.sizeX = zytheronNaturalInfo.sizeX * inst.scale;
@@ -2068,6 +2129,8 @@ class Enemy {
         if (!this.visualsBuilt || this.builtAsBoss !== this.isBoss || this.builtTint !== levelData.enemyTint) {
             this.buildVisuals(this.isBoss, levelData.enemyTint);
         }
+
+        this.radius = this.isBoss ? 7.5 : 4.2; // hit radius tracks the variant's silhouette
 
         if (!this.isBoss) resolveObstacleCollisions(this);
         this.active = true;
@@ -2359,11 +2422,13 @@ function togglePause() {
     if (currentState === GAME_STATE.PLAYING) {
         currentState = GAME_STATE.PAUSED;
         pauseScreen.classList.remove('hidden');
+        BGM.pause();
         AudioSys.ui();
     } else if (currentState === GAME_STATE.PAUSED) {
         currentState = GAME_STATE.PLAYING;
         pauseScreen.classList.add('hidden');
         lastTime = performance.now();
+        BGM.resume();
         AudioSys.ui();
     }
 }
@@ -2547,6 +2612,8 @@ document.getElementById('enter-btn').addEventListener('click', () => {
     AudioSys.init();
     AudioSys.resume();
     AudioSys.ui();
+    AudioSys.setAmbient(LEVELS[0].ambientSound); // menu bed starts now that audio is unlocked
+    BGM.start(); // sentinel.mp3 if present -- takes over the bed on success
     document.getElementById('splash-screen').classList.add('hidden');
     document.getElementById('start-screen').classList.remove('hidden');
 });
