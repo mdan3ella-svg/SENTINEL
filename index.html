@@ -105,6 +105,24 @@
         box-shadow:0 0 22px rgba(255,122,26,0.55); transition:transform 0.15s ease, box-shadow 0.15s ease; cursor:pointer; }
     .btn-primary:hover:not(:disabled){ transform:scale(1.04); box-shadow:0 0 34px rgba(255,122,26,0.85); }
     .btn-primary:disabled{ opacity:0.45; filter:grayscale(0.5); cursor:wait; animation:none; }
+
+    /* ============ INTRO CINEMATIC (sentinel.mp4) ============ */
+    #intro-screen{ position:fixed; inset:0; z-index:200; background:var(--void); display:flex; align-items:center; justify-content:center;
+        opacity:1; transition:opacity 0.65s ease; }
+    #intro-screen.fade-out{ opacity:0; pointer-events:none; }
+    #intro-video{ width:100%; height:100%; object-fit:cover; background:var(--void); }
+    #intro-brand{ position:absolute; top:22px; left:26px; font-family:'Space Mono',monospace; font-size:12px; letter-spacing:0.3em;
+        color:var(--amber); text-shadow:0 0 10px rgba(255,122,26,0.7); pointer-events:none; }
+    #intro-brand span{ color:var(--ink); }
+    .intro-chip{ position:absolute; font-family:'Space Mono',monospace; font-size:11px; letter-spacing:0.15em; color:var(--ink);
+        background:rgba(5,8,9,0.55); border:1px solid var(--panel-line); padding:8px 16px; cursor:pointer;
+        clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%); }
+    .intro-chip:hover{ border-color:var(--amber); color:var(--amber); }
+    #intro-skip{ right:22px; bottom:22px; }
+    #intro-sound{ left:22px; bottom:22px; color:var(--cyan); }
+    #intro-bar{ position:absolute; left:0; bottom:0; height:3px; width:0%; background:linear-gradient(90deg, var(--amber), var(--cyan));
+        box-shadow:0 0 10px rgba(255,122,26,0.8); pointer-events:none; }
+
     .btn-secondary{ pointer-events:auto; font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:0.08em; color:var(--cyan);
         background:transparent; border:1px solid var(--cyan); clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
         transition:transform 0.15s ease, box-shadow 0.15s ease; cursor:pointer; }
@@ -399,6 +417,15 @@
 </div>
 
 <!-- SPLASH -->
+<!-- INTRO CINEMATIC — sentinel.mp4 from the same folder, plays over engine boot -->
+<div id="intro-screen">
+    <video id="intro-video" src="sentinel.mp4" muted autoplay playsinline preload="auto"></video>
+    <div id="intro-brand">VERTASCAN <span>// SENTINEL</span></div>
+    <div class="intro-chip" id="intro-sound">SOUND: OFF</div>
+    <div class="intro-chip" id="intro-skip">SKIP ▸</div>
+    <div id="intro-bar"></div>
+</div>
+
 <div id="splash-screen">
     <div class="splash-grid"></div>
     <div class="splash-inner">
@@ -496,6 +523,74 @@ window.addEventListener('error', function (e) {
 // The entire game boots from this function — called by the engine-wait loop at
 // the bottom of the file. If the primary three.js CDN stalls, the fallback tag
 // arrives asynchronously; we WAIT for it instead of aborting on first check.
+
+// ============================= INTRO CINEMATIC =============================
+// sentinel.mp4 (same folder — works nested in any GitHub Pages path) runs as
+// the load screen while the engine and GLBs stream in behind it. Muted
+// autoplay satisfies every browser's policy; a SOUND chip unmutes on gesture.
+// EVERY failure path — missing file, offline, autoplay denial, stalled
+// network — advances to the Initialize splash. The cinematic can delay boot
+// visuals, never block them.
+(function introSequence() {
+    var screen = document.getElementById('intro-screen');
+    var vid = document.getElementById('intro-video');
+    if (!screen || !vid) return;
+    var done = false;
+    function finish() {
+        if (done) return;
+        done = true;
+        screen.classList.add('fade-out');
+        setTimeout(function () {
+            screen.style.display = 'none';
+            try { vid.pause(); } catch (e) {}
+            try { vid.removeAttribute('src'); vid.load(); } catch (e) {} // release the decoder
+        }, 700);
+    }
+    window.__skipIntro = finish; // test hook / console escape hatch
+
+    vid.muted = true; // property AND attribute — some engines require both pre-play
+    vid.addEventListener('ended', finish);
+    vid.addEventListener('error', finish);
+    vid.addEventListener('abort', finish);
+
+    // progress bar tracks playback
+    var bar = document.getElementById('intro-bar');
+    vid.addEventListener('timeupdate', function () {
+        if (bar && vid.duration > 0) bar.style.width = (vid.currentTime / vid.duration * 100) + '%';
+    });
+
+    // SKIP chip + tap anywhere on the video
+    var skip = document.getElementById('intro-skip');
+    if (skip) {
+        skip.addEventListener('click', function (e) { e.stopPropagation(); finish(); });
+        skip.addEventListener('touchend', function (e) { e.preventDefault(); e.stopPropagation(); finish(); }, { passive: false });
+    }
+    screen.addEventListener('click', finish);
+
+    // SOUND chip — unmuting inside a gesture is always permitted
+    var snd = document.getElementById('intro-sound');
+    if (snd) {
+        var toggleSound = function (e) {
+            e.preventDefault(); e.stopPropagation();
+            vid.muted = !vid.muted;
+            snd.textContent = vid.muted ? 'SOUND: OFF' : 'SOUND: ON';
+            if (!vid.muted && vid.paused) { try { var pp = vid.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (err) {} }
+        };
+        snd.addEventListener('click', toggleSound);
+        snd.addEventListener('touchend', toggleSound, { passive: false });
+    }
+
+    // start playback; if the browser refuses or the file never arrives, move on
+    var started = false;
+    vid.addEventListener('playing', function () { started = true; });
+    try {
+        var p = vid.play();
+        if (p && p.catch) p.catch(function () { if (!started) finish(); });
+    } catch (e) { finish(); }
+    setTimeout(function () { if (!started && !done) finish(); }, 6000);   // never stall a cold load
+    setTimeout(function () { if (!done) finish(); }, 16000);              // hard cap regardless
+})();
+
 function __bootSentinel() {
 
 // ============================= GAME STATE =============================
