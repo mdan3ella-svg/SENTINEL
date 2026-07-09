@@ -5,9 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>VERTASCAN // SENTINEL</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';document.head.appendChild(s);"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js';document.head.appendChild(s);"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"
+        onerror="this.onerror=null;var s=document.createElement('script');s.src='https://unpkg.com/three@0.128.0/examples/js/utils/SkeletonUtils.js';document.head.appendChild(s);"></script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -457,6 +460,25 @@
 </div>
 
 <script>
+// ============================= BOOT GUARD / LIVE DIAGNOSTICS =============================
+// A dead Initialize button always means a fatal script error. Trap it and SHOW it —
+// no desktop console needed on mobile. Also refuse to boot without the engine.
+function bootFail(msg) {
+    var bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#200a02;color:#ff7a1a;' +
+        'font:12px "Space Mono",monospace;padding:10px 14px;border-top:2px solid #ff7a1a;white-space:pre-wrap;pointer-events:none;';
+    bar.textContent = '// SENTINEL BOOT DIAGNOSTIC\n' + msg;
+    document.body.appendChild(bar);
+}
+window.addEventListener('error', function (e) {
+    if (window._sentinelBooted) return; // only surface boot-time failures
+    bootFail((e.message || 'unknown error') + (e.filename ? '\n' + e.filename.split('/').pop() + ':' + e.lineno : ''));
+});
+if (typeof THREE === 'undefined') {
+    bootFail('three.js engine failed to load from CDN.\nCheck your connection / content blocker, then reload.');
+    throw new Error('THREE missing — boot aborted');
+}
+
 // ============================= GAME STATE =============================
 const GAME_STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, INTERMISSION: 3, GAMEOVER: 4 };
 let currentState = GAME_STATE.MENU;
@@ -777,6 +799,7 @@ function applyGfxMode(){
         await loadScriptOnce(base + 'shaders/CopyShader.js');
         await loadScriptOnce(base + 'postprocessing/ShaderPass.js');
         await loadScriptOnce(base + 'shaders/SSAOShader.js');
+        await loadScriptOnce(base + 'math/SimplexNoise.js'); // SSAOPass hard-requires this
         await loadScriptOnce(base + 'postprocessing/SSAOPass.js');
         await loadScriptOnce(base + 'shaders/LuminosityHighPassShader.js');
         await loadScriptOnce(base + 'postprocessing/UnrealBloomPass.js');
@@ -1735,8 +1758,11 @@ function resolveObstacleCollisions(entity) {
 }
 
 // --- GLTF LOADERS ---
-const gltfLoader = new THREE.GLTFLoader();
-gltfLoader.load(
+// Guarded: if the loader script never arrived (CDN outage), the game still
+// boots on procedural frames instead of dying at construction.
+const gltfLoader = (typeof THREE.GLTFLoader === 'function') ? new THREE.GLTFLoader() : null;
+if (!gltfLoader) console.warn('[SENTINEL] GLTFLoader unavailable — procedural frames only.');
+if (gltfLoader) gltfLoader.load(
     'blue.glb',
     (gltf) => {
         try {
@@ -1749,7 +1775,7 @@ gltfLoader.load(
     undefined,
     (error) => { console.warn('[SENTINEL] Could not load blue.glb. Falling back to procedural frame.', error); }
 );
-gltfLoader.load(
+if (gltfLoader) gltfLoader.load(
     'ZYTHERON_CRAFT.glb',
     (gltf) => {
         try {
@@ -1965,1361 +1991,186 @@ const Haptics = {
         } else if (IS_TOUCH && navigator.vibrate) {
             const now = performance.now();
             if (strong >= 0.5 && now - this.lastVibe > 90) { // throttle device motor to meaningful hits
-                naviga    #game-canvas{ display:block; width:100%; height:100%; position:absolute; top:0; left:0; z-index:1; cursor:none; }
-
-    /* atmosphere layers */
-    #vignette{ position:absolute; inset:0; z-index:5; pointer-events:none;
-        background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%); }
-    #scanlines{ position:absolute; inset:0; z-index:6; pointer-events:none; opacity:0.08;
-        background: repeating-linear-gradient(0deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 3px); }
-    #grain-tint{ position:absolute; inset:0; z-index:6; pointer-events:none; opacity:0.06; mix-blend-mode:overlay;
-        background: linear-gradient(120deg, var(--amber), var(--cyan)); }
-    #haze{ position:absolute; inset:0; z-index:4; pointer-events:none; opacity:0.85; transition: background 1.2s ease;
-        background: radial-gradient(ellipse at 50% 68%, rgba(255,150,60,0.16) 0%, rgba(255,150,60,0.04) 45%, rgba(255,150,60,0) 75%); }
-    #dash-flash{ position:absolute; inset:0; z-index:15; pointer-events:none; opacity:0;
-        background: radial-gradient(circle at center, rgba(79,209,197,0.0) 30%, rgba(79,209,197,0.35) 100%);
-        transition: opacity 0.08s ease-out; }
-    #dash-flash.active{ opacity:1; transition: opacity 0.02s linear; }
-    #low-health-vig{ position:absolute; inset:0; z-index:16; pointer-events:none; opacity:0;
-        background: radial-gradient(ellipse at center, rgba(239,68,68,0) 40%, rgba(239,68,68,0.55) 100%);
-        transition: opacity 0.25s ease; }
-    #hit-flash{ position:absolute; inset:0; z-index:17; pointer-events:none; opacity:0; background: rgba(239,68,68,0.22); transition: opacity 0.28s ease; }
-    #hit-flash.show{ opacity:1; transition: opacity 0.02s linear; }
-    #level-flash{ position:absolute; inset:0; z-index:17; pointer-events:none; opacity:0; background: rgba(255,122,26,0.26); transition: opacity 0.4s ease; }
-    #level-flash.show{ opacity:1; transition: opacity 0.02s linear; }
-
-    #reticle{ position:absolute; z-index:18; width:38px; height:38px; margin:-19px 0 0 -19px; pointer-events:none; }
-    #reticle svg{ width:100%; height:100%; }
-    #reticle .ring{ transform-origin:center; animation: spin 6s linear infinite; }
-    @keyframes spin{ to{ transform:rotate(360deg); } }
-    #reticle.hot .ring circle{ stroke:var(--heat); }
-    #hit-marker{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(0.6); z-index:19; pointer-events:none;
-        color:var(--amber); font-size:26px; font-weight:800; opacity:0; font-family:'Space Mono',monospace; text-shadow:0 0 8px rgba(255,122,26,0.9); }
-    #hit-marker.show{ opacity:1; animation: hitpop 0.22s ease-out; }
-    @keyframes hitpop{ 0%{ transform:translate(-50%,-50%) scale(1.3); } 100%{ transform:translate(-50%,-50%) scale(0.9); } }
-
-    #floating-layer{ position:fixed; inset:0; z-index:25; pointer-events:none; overflow:hidden; }
-    .float-txt{ position:absolute; font-family:'Space Mono',monospace; font-weight:700; white-space:nowrap; transform:translate(-50%,-50%);
-        animation: floatUp 1.1s ease-out forwards; text-shadow:0 0 6px currentColor; }
-    @keyframes floatUp{ 0%{ opacity:1; transform:translate(-50%,-50%) translateY(0); } 100%{ opacity:0; transform:translate(-50%,-70%) translateY(-40px); } }
-
-    /* HUD panels */
-    .panel-cut{ clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); }
-    .hud-panel{ background:var(--panel); border:1px solid var(--panel-line); backdrop-filter:blur(6px); }
-
-    .hud-bar-track{ background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); height:10px; width:230px; position:relative; overflow:hidden; clip-path: polygon(0 0, 100% 0, 100% 100%, 6px 100%, 0 70%); }
-    .hud-bar{ height:100%; transition:width 0.15s ease-out; }
-    .health-bar{ background:linear-gradient(90deg, #ef4444, #f59e9e); box-shadow:0 0 10px #ef4444; }
-    .neural-bar{ background:linear-gradient(90deg, var(--cyan), #8ff2e8); box-shadow:0 0 10px var(--cyan); }
-    .heat-bar{ background:linear-gradient(90deg, var(--amber), var(--heat)); box-shadow:0 0 10px var(--amber); }
-    .kill-bar{ background:linear-gradient(90deg, var(--amber), #ffb347); box-shadow:0 0 8px var(--amber); }
-    .boss-bar{ background:linear-gradient(90deg, var(--hive), #d4b6ff); box-shadow:0 0 12px var(--hive); }
-
-    .label-eyebrow{ font-family:'Space Mono',monospace; font-size:10px; letter-spacing:0.15em; color:var(--ink-dim); text-transform:uppercase; }
-
-    #dash-ring{ width:38px; height:38px; border-radius:50%; position:relative; }
-    #dash-ring svg{ width:100%; height:100%; transform:rotate(-90deg); }
-
-    #minimap{ width:140px; height:140px; display:block; background:rgba(5,8,9,0.6); border:1px solid var(--panel-line); }
-
-    .hidden{ display:none !important; }
-
-    #start-screen, #game-over-screen, #pause-screen{ position:absolute; inset:0; z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center;
-        background: radial-gradient(ellipse at 50% 30%, rgba(255,122,26,0.07), rgba(0,0,0,0.92) 70%); pointer-events:auto; }
-    #pause-screen{ z-index:60; background: rgba(3,4,5,0.82); backdrop-filter: blur(4px); }
-
-    .btn-primary{ pointer-events:auto; font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:0.08em; color:var(--void);
-        background:linear-gradient(90deg, var(--amber), #ffb347); border:none; clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
-        box-shadow:0 0 22px rgba(255,122,26,0.55); transition:transform 0.15s ease, box-shadow 0.15s ease; cursor:pointer; }
-    .btn-primary:hover:not(:disabled){ transform:scale(1.04); box-shadow:0 0 34px rgba(255,122,26,0.85); }
-    .btn-secondary{ pointer-events:auto; font-family:'Rajdhani',sans-serif; font-weight:700; letter-spacing:0.08em; color:var(--cyan);
-        background:transparent; border:1px solid var(--cyan); clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-        transition:transform 0.15s ease, box-shadow 0.15s ease; cursor:pointer; }
-    .btn-secondary:hover{ box-shadow:0 0 18px rgba(79,209,197,0.4); transform:scale(1.03); }
-
-    .term-blink::after{ content:'_'; animation: blink 1s step-end infinite; color:var(--amber); }
-    @keyframes blink{ 50%{ opacity:0; } }
-
-    .title-glow{ text-shadow: 0 0 20px rgba(255,122,26,0.65), 0 0 60px rgba(255,122,26,0.3); }
-    .mission-brief{ color:var(--ink); font-size:14px; line-height:1.6; }
-    .mission-brief p{ color:var(--ink) !important; }
-
-    /* ============ SPLASH ============ */
-    /* sentinel.jpg (optional, same folder) sits under the tint layers; if the
-       file is absent the url() layer simply doesn't paint and the gradient
-       backdrop shows exactly as before. */
-    #splash-screen{ position:absolute; inset:0; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center;
-        background:
-          linear-gradient(180deg, rgba(5,6,7,0.30) 0%, rgba(5,6,7,0.55) 60%, rgba(5,6,7,0.88) 100%),
-          radial-gradient(ellipse at 50% 110%, rgba(255,122,26,0.18), transparent 55%),
-          radial-gradient(ellipse at 50% -20%, rgba(79,209,197,0.10), transparent 50%),
-          url('sentinel.jpg') center / cover no-repeat,
-          var(--void);
-        pointer-events:auto; }
-    #splash-screen .splash-grid{ position:absolute; inset:0; opacity:0.14;
-        background-image: linear-gradient(rgba(79,209,197,0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(79,209,197,0.25) 1px, transparent 1px);
-        background-size: 44px 44px;
-        mask-image: radial-gradient(ellipse at 50% 60%, black 20%, transparent 75%); }
-    #splash-screen .splash-inner{ position:relative; z-index:2; text-align:center; }
-    .splash-eyebrow{ letter-spacing:0.4em; color:var(--cyan); font-family:'Space Mono',monospace; font-size:11px; opacity:0.9; }
-    #enter-btn.pulse{ animation: enterPulse 2.4s ease-in-out infinite; }
-    @keyframes enterPulse{ 0%,100%{ box-shadow:0 0 22px rgba(255,122,26,0.55);} 50%{ box-shadow:0 0 42px rgba(255,122,26,0.95);} }
-
-    /* ============ LEVEL DEPLOYMENT CARD (signature) ============ */
-    #level-card{ position:absolute; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; pointer-events:none;
-        background: linear-gradient(180deg, rgba(3,4,5,0.88) 0%, rgba(3,4,5,0.72) 50%, rgba(3,4,5,0.88) 100%); }
-    #level-card .card-inner{ text-align:left; position:relative; padding:26px 40px; border-left:3px solid var(--amber); max-width:640px; }
-    #level-card .card-eyebrow{ font-family:'Space Mono',monospace; font-size:11px; letter-spacing:0.35em; color:var(--cyan); }
-    #level-card .card-title{ font-family:'Orbitron',sans-serif; font-weight:900; font-size:clamp(34px,6vw,64px); color:var(--amber);
-        text-shadow:0 0 26px rgba(255,122,26,0.5); line-height:1.05; margin-top:8px; }
-    #level-card .card-brief{ font-family:'Rajdhani',sans-serif; font-size:17px; color:var(--ink); margin-top:12px; max-width:520px; }
-    #level-card .card-obj{ font-family:'Space Mono',monospace; font-size:12px; letter-spacing:0.12em; color:var(--ink-dim); margin-top:14px; }
-    #level-card .card-obj b{ color:var(--amber); }
-    #level-card .sweep{ position:absolute; left:0; top:0; bottom:0; width:100%; pointer-events:none; overflow:hidden; }
-    #level-card .sweep::after{ content:''; position:absolute; top:0; bottom:0; width:120px; left:-140px;
-        background: linear-gradient(90deg, transparent, rgba(255,122,26,0.16), transparent);
-        animation: sweepAcross 1.6s ease-out forwards; }
-    @keyframes sweepAcross{ to{ left:110%; } }
-    #level-card.show-card{ animation: cardIn 0.35s ease-out; }
-    @keyframes cardIn{ from{ opacity:0; } to{ opacity:1; } }
-    @media (prefers-reduced-motion: reduce){
-        #level-card .sweep::after, #reticle .ring, #enter-btn.pulse{ animation:none; }
-    }
-</style>
-</head>
-<body>
-
-<canvas id="game-canvas"></canvas>
-<div id="vignette"></div>
-<div id="haze"></div>
-<div id="scanlines"></div>
-<div id="grain-tint"></div>
-<div id="dash-flash"></div>
-<div id="low-health-vig"></div>
-<div id="hit-flash"></div>
-<div id="level-flash"></div>
-<div id="reticle">
-    <svg viewBox="0 0 34 34">
-        <g class="ring">
-            <circle cx="17" cy="17" r="14" fill="none" stroke="var(--amber)" stroke-width="1.4" stroke-dasharray="6 5" opacity="0.85"/>
-        </g>
-        <line x1="17" y1="2" x2="17" y2="9" stroke="var(--amber)" stroke-width="1.6"/>
-        <line x1="17" y1="25" x2="17" y2="32" stroke="var(--amber)" stroke-width="1.6"/>
-        <line x1="2" y1="17" x2="9" y2="17" stroke="var(--amber)" stroke-width="1.6"/>
-        <line x1="25" y1="17" x2="32" y2="17" stroke="var(--amber)" stroke-width="1.6"/>
-        <circle cx="17" cy="17" r="1.6" fill="var(--amber)"/>
-    </svg>
-</div>
-<div id="hit-marker">×</div>
-<div id="floating-layer"></div>
-
-<div id="ui-layer" class="hidden absolute inset-0 z-10 flex flex-col justify-between p-4 md:p-6" style="pointer-events:none;">
-    <div class="w-full flex justify-between items-start gap-4">
-
-        <!-- LEFT: vitals -->
-        <div class="hud-panel panel-cut p-3" style="min-width:270px;">
-            <div class="flex justify-between items-baseline gap-3">
-                <span class="label-eyebrow">Hull Integrity</span>
-                <span class="label-eyebrow" style="color:var(--danger);">SNT-01</span>
-            </div>
-            <div class="hud-bar-track mt-1"><div id="health-bar" class="hud-bar health-bar" style="width:100%;"></div></div>
-
-            <div class="flex justify-between items-baseline gap-3 mt-2">
-                <span class="label-eyebrow">Reactor Charge</span>
-            </div>
-            <div class="hud-bar-track mt-1"><div id="neural-bar" class="hud-bar neural-bar" style="width:100%;"></div></div>
-
-            <div class="flex justify-between items-baseline gap-3 mt-2">
-                <span class="label-eyebrow">Cannon Heat</span>
-                <span id="heat-status" class="font-mono text-xs" style="color:var(--amber);">NOMINAL</span>
-            </div>
-            <div class="hud-bar-track mt-1"><div id="heat-bar" class="hud-bar heat-bar" style="width:0%;"></div></div>
-
-            <div class="flex items-center gap-3 mt-3">
-                <div id="dash-ring">
-                    <svg viewBox="0 0 38 38">
-                        <circle cx="19" cy="19" r="15" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="3"/>
-                        <circle id="dash-ring-fg" cx="19" cy="19" r="15" fill="none" stroke="var(--cyan)" stroke-width="3" stroke-dasharray="94.2" stroke-dashoffset="0" stroke-linecap="round"/>
-                    </svg>
-                </div>
-                <div>
-                    <div class="label-eyebrow">Drive Burst</div>
-                    <div id="dash-status" class="font-mono text-xs" style="color:var(--cyan);">READY</div>
-                </div>
-                <div class="ml-4">
-                    <div class="label-eyebrow">Camera</div>
-                    <div class="font-mono text-xs" style="color:var(--ink-dim);"><span id="camera-mode-label">3RD PERSON</span></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- CENTER: boss -->
-        <div id="boss-panel" class="hud-panel panel-cut p-3 hidden self-start" style="width:340px;">
-            <div class="flex justify-between items-baseline">
-                <span class="label-eyebrow" style="color:var(--hive);">Hive Sovereign</span>
-                <div id="boss-name" class="font-display text-sm font-bold" style="color:var(--hive);">ZYXAR</div>
-            </div>
-            <div class="hud-bar-track mt-1" style="width:100%;"><div id="boss-bar" class="hud-bar boss-bar" style="width:100%;"></div></div>
-        </div>
-
-        <!-- RIGHT: mission + minimap -->
-        <div class="hud-panel panel-cut p-3" style="min-width:270px;">
-            <div class="flex gap-3">
-                <div class="flex-1">
-                    <div class="label-eyebrow">Front</div>
-                    <div id="level-display" class="font-display text-sm font-bold" style="color:var(--amber);">I: ASHVEIL DUNES</div>
-                    <div id="objective-display" class="font-mono text-xs mt-1" style="color:var(--ink-dim);">OBJ: Purge the Vanguard</div>
-
-                    <div class="mt-2">
-                        <div class="flex justify-between items-baseline gap-3">
-                            <span class="label-eyebrow">Hostiles</span>
-                            <span id="kill-count" class="font-mono text-xs" style="color:var(--amber);">00 / 12</span>
-                        </div>
-                        <div class="hud-bar-track mt-1" style="width:100%;"><div id="kill-bar" class="hud-bar kill-bar" style="width:0%;"></div></div>
-                    </div>
-
-                    <div id="timer-display" class="font-mono text-xl font-bold mt-2 hidden" style="color:var(--amber);">T-MINUS: --</div>
-
-                    <div class="mt-2">
-                        <div class="label-eyebrow">Score</div>
-                        <div class="font-mono text-2xl font-bold" id="score-display" style="color:var(--ink);">0000</div>
-                    </div>
-                </div>
-                <div>
-                    <div class="label-eyebrow mb-1">Tactical</div>
-                    <canvas id="minimap" width="140" height="140"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="w-full flex justify-center pb-1">
-        <div class="hud-panel panel-cut px-5 py-2">
-            <p class="font-mono text-xs" style="color:var(--ink-dim); letter-spacing:0.05em;">
-                <span style="color:var(--amber);">W A S D</span> Move &nbsp;·&nbsp;
-                <span style="color:var(--amber);">SPACE</span> Jump Jets &nbsp;·&nbsp;
-                <span style="color:var(--amber);">SHIFT+W</span> Drive Burst &nbsp;·&nbsp;
-                <span style="color:var(--amber);">L-CLICK</span> Fire &nbsp;·&nbsp;
-                <span style="color:var(--amber);">R</span> Vent Heat &nbsp;·&nbsp;
-                <span style="color:var(--amber);">V</span> Camera &nbsp;·&nbsp;
-                <span style="color:var(--amber);">ESC</span> Pause
-            </p>
-        </div>
-    </div>
-</div>
-
-<!-- SPLASH -->
-<div id="splash-screen">
-    <div class="splash-grid"></div>
-    <div class="splash-inner">
-        <div class="splash-eyebrow">VERTASCAN // MERIDIAN ACCORD WAR-FRAME DIVISION</div>
-        <h1 class="font-display title-glow text-6xl md:text-8xl font-black tracking-tight mt-3" style="color:var(--amber);">SENTINEL</h1>
-        <h2 class="text-lg md:text-2xl font-semibold tracking-[0.35em] mt-2" style="color:var(--ink-dim);">THE KHAROS CAMPAIGN</h2>
-        <button id="enter-btn" class="btn-primary pulse mt-10 px-12 py-4 text-xl uppercase font-display">Initialize</button>
-    </div>
-</div>
-
-<!-- BRIEFING / START -->
-<div id="start-screen" class="hidden">
-    <div class="text-center px-6 py-6 overflow-y-auto" style="max-height:100vh;">
-        <div class="label-eyebrow mb-2" style="letter-spacing:0.3em; color:var(--cyan);">MERIDIAN ACCORD // DEPLOYMENT AUTH 07-A</div>
-        <h1 class="font-display title-glow text-6xl md:text-7xl font-black tracking-tight" style="color:var(--amber);">SENTINEL</h1>
-        <h2 class="text-xl md:text-2xl font-semibold tracking-[0.3em] mt-2" style="color:var(--ink-dim);">THE KHAROS CAMPAIGN</h2>
-
-        <div class="hud-panel panel-cut mt-6 mx-auto p-4 text-left font-mono text-sm max-w-lg mission-brief">
-            <p style="color:var(--amber);">&gt; INCOMING TRANSMISSION<span class="term-blink"></span></p>
-            <p class="mt-2">You are SENTINEL — the last autonomous war-frame of the Meridian Accord. The Zytheron Hive has burned three fronts across Kharos: the ash wastes, the foundry trench, and the summit above the snowline.</p>
-            <p class="mt-2">Walk the ash. Collapse the line. Silence the Sovereign.</p>
-        </div>
-
-        <div class="hud-panel panel-cut mt-4 mx-auto p-3 max-w-lg flex justify-around font-mono text-xs" style="color:var(--ink-dim);">
-            <span>FRAME<b class="block text-sm" style="color:var(--amber);">SNT-01</b></span>
-            <span>HEIGHT<b class="block text-sm" style="color:var(--amber);">3.7 M</b></span>
-            <span>WEAPON<b class="block text-sm" style="color:var(--amber);">ARC CANNON</b></span>
-            <span>DRIVE<b class="block text-sm" style="color:var(--amber);">BURST CAPABLE</b></span>
-        </div>
-
-        <button id="start-btn" class="btn-primary mt-8 px-12 py-4 text-2xl uppercase font-display">Deploy</button>
-    </div>
-</div>
-
-<!-- LEVEL DEPLOYMENT CARD -->
-<div id="level-card" class="hidden">
-    <div class="sweep"></div>
-    <div class="card-inner">
-        <div class="card-eyebrow" id="card-eyebrow">FRONT 01 // DEPLOYMENT</div>
-        <div class="card-title" id="card-title">ASHVEIL DUNES</div>
-        <div class="card-brief" id="card-brief">Hive vanguard staging in the ash wastes. Scatter them before the storm turns.</div>
-        <div class="card-obj" id="card-obj">OBJECTIVE // <b>PURGE THE VANGUARD</b></div>
-    </div>
-</div>
-
-<!-- PAUSE -->
-<div id="pause-screen" class="hidden">
-    <div class="label-eyebrow" style="letter-spacing:0.35em; color:var(--cyan);">SYSTEMS HOLD</div>
-    <h1 class="font-display text-5xl font-black tracking-widest mt-2" style="color:var(--amber);">PAUSED</h1>
-    <div class="flex gap-4 mt-8">
-        <button id="resume-btn" class="btn-primary px-10 py-3 text-lg uppercase font-display">Resume</button>
-        <button id="quit-btn" class="btn-secondary px-10 py-3 text-lg uppercase font-display">Abort Run</button>
-    </div>
-</div>
-
-<!-- END -->
-<div id="game-over-screen" class="hidden">
-    <h1 class="font-display text-5xl md:text-6xl font-black tracking-widest" id="end-title" style="color:var(--danger); text-shadow:0 0 20px rgba(239,68,68,0.7);">FRAME LOST</h1>
-
-    <div class="hud-panel panel-cut mt-6 p-6 flex gap-8 text-center">
-        <div>
-            <div class="label-eyebrow">Final Score</div>
-            <div class="font-mono text-3xl font-bold" id="end-score" style="color:var(--ink);">0</div>
-        </div>
-        <div>
-            <div class="label-eyebrow">Front Reached</div>
-            <div class="font-mono text-3xl font-bold" id="end-sector" style="color:var(--ink);">I</div>
-        </div>
-        <div>
-            <div class="label-eyebrow">Hostiles Purged</div>
-            <div class="font-mono text-3xl font-bold" id="end-kills" style="color:var(--ink);">0</div>
-        </div>
-    </div>
-
-    <button id="restart-btn" class="btn-primary mt-8 px-10 py-3 text-xl uppercase font-display">Redeploy</button>
-</div>
-
-<script>
-// ============================= GAME STATE =============================
-const GAME_STATE = { MENU: 0, PLAYING: 1, PAUSED: 2, INTERMISSION: 3, GAMEOVER: 4 };
-let currentState = GAME_STATE.MENU;
-let score = 0;
-let totalKills = 0;
-let currentLevel = 1;
-let timeRemaining = 0;
-let lastTime = 0;
-let frameCount = 0;
-let menuAnimId = null;
-let loopRunning = false;
-let hitStop = 0; // brief slow-mo on kill
-
-let sentinelGLB = null;          // blue.glb scene (SENTINEL frame)
-let sentinelAnimations = [];
-let sentinelNaturalInfo = null;  // raw bbox, captured pre-scale
-
-let zytheronGLB = null;          // zytheroncraft.glb scene (enemy fleet)
-let zytheronAnimations = [];
-let zytheronNaturalInfo = null;
-
-// ---- 12ft mech scale. Every spatial constant below derives from this so the
-// whole world stays in ratio: SENTINEL 3.66m, fleet fighters 2x, Sovereign ~3.6x.
-const PLAYER_TARGET_HEIGHT = 3.66;
-const FIGHTER_TARGET_HEIGHT = PLAYER_TARGET_HEIGHT * 2;
-const BOSS_TARGET_HEIGHT = FIGHTER_TARGET_HEIGHT * 1.8;
-const WORLD_BOUND = 170;
-const ARENA_SIZE = 440;
-
-// Case-insensitive, substring-tolerant clip lookup (blue.glb ships a single
-// Mixamo clip, so most lookups intentionally fall back to clips[0]).
-function findClipLoose(clips, candidates) {
-    if (!clips || clips.length === 0) return null;
-    for (const term of candidates) {
-        const lower = term.toLowerCase();
-        const hit = clips.find(c => c.name && c.name.toLowerCase().includes(lower));
-        if (hit) return hit;
-    }
-    return null;
-}
-
-// Skin-aware bbox: blue.glb is a rigged Mixamo export where raw vertex data and
-// bone hierarchy use different internal unit scales, reconciled only through the
-// skin's inverse-bind matrices. Plain Box3.setFromObject reads un-skinned verts
-// and produces a wrong-axis sliver, blowing the uniform scale factor up ~60x.
-// boneTransform() walks the same path three.js uses for skinned raycasting.
-function measureSkinAwareBBox(object) {
-    const skinnedMeshes = [];
-    object.traverse((node) => { if (node.isSkinnedMesh) skinnedMeshes.push(node); });
-    if (skinnedMeshes.length === 0) return null;
-
-    const box = new THREE.Box3();
-    const v = new THREE.Vector3();
-    for (const mesh of skinnedMeshes) {
-        if (mesh.skeleton) mesh.skeleton.update();
-        const posAttr = mesh.geometry.attributes.position;
-        if (!posAttr) continue;
-        const step = Math.max(1, Math.floor(posAttr.count / 4000));
-        for (let i = 0; i < posAttr.count; i += step) {
-            mesh.boneTransform(i, v);
-            v.applyMatrix4(mesh.matrixWorld);
-            box.expandByPoint(v);
-        }
-    }
-    if (box.isEmpty()) return null;
-    return {
-        min: box.min.clone(), max: box.max.clone(),
-        height: Math.max(0.001, box.max.y - box.min.y),
-        sizeX: Math.max(0.001, box.max.x - box.min.x),
-        sizeZ: Math.max(0.001, box.max.z - box.min.z)
-    };
-}
-function measureNaturalBBox(object) {
-    object.updateMatrixWorld(true); // flush nested Blender unit-scale transforms first
-    const skinAware = measureSkinAwareBBox(object);
-    if (skinAware) return skinAware;
-    const box = new THREE.Box3().setFromObject(object);
-    return {
-        min: box.min.clone(), max: box.max.clone(),
-        height: Math.max(0.001, box.max.y - box.min.y),
-        sizeX: Math.max(0.001, box.max.x - box.min.x),
-        sizeZ: Math.max(0.001, box.max.z - box.min.z)
-    };
-}
-
-// SkeletonUtils.clone (NOT Object3D.clone): a plain deep clone leaves each
-// SkinnedMesh's skeleton pointing at the ORIGINAL bones, so the mixer animates
-// nodes the geometry never reads. SkeletonUtils rebinds skinning to the clone.
-// mode 'height' (default): scale so standing height = target — right for humanoids.
-// mode 'max': scale so the DOMINANT axis = target — right for flat/long craft like
-// ZYTHERON_CRAFT.glb (4.56 long x 1.56 tall raw); height-normalizing a flat wing
-// would inflate its span ~3x past the intended silhouette.
-function instantiateModel(sourceScene, naturalInfo, targetHeight, mode) {
-    const clone = (THREE.SkeletonUtils && THREE.SkeletonUtils.clone)
-        ? THREE.SkeletonUtils.clone(sourceScene)
-        : sourceScene.clone(true);
-    clone.traverse((node) => {
-        if (node.isMesh) {
-            node.castShadow = true;
-            node.receiveShadow = true;
-            if (node.material) {
-                // multi-material meshes ship material ARRAYS — clone element-wise
-                if (Array.isArray(node.material)) {
-                    node.material = node.material.map(m => { const c = m.clone(); c.envMapIntensity = 1.4; return c; });
-                } else {
-                    node.material = node.material.clone();
-                    node.material.envMapIntensity = 1.4;
-                }
+                navigator.vibrate(Math.min(200, ms));
+                this.lastVibe = now;
             }
         }
-    });
-    const denom = (mode === 'max')
-        ? Math.max(naturalInfo.height, naturalInfo.sizeX, naturalInfo.sizeZ)
-        : naturalInfo.height;
-    const scale = targetHeight / denom;
-    clone.scale.setScalar(scale);
-    clone.position.set(
-        -((naturalInfo.min.x + naturalInfo.max.x) / 2) * scale,
-        -naturalInfo.min.y * scale,
-        -((naturalInfo.min.z + naturalInfo.max.z) / 2) * scale
-    );
-    const wrapper = new THREE.Group();
-    wrapper.add(clone);
-    return { wrapper, model: clone, scale, height: targetHeight, naturalInfo };
-}
-
-function tintModelEmissive(model, hexColor, intensity) {
-    model.traverse((node) => {
-        if (node.isMesh && node.material) {
-            const mats = Array.isArray(node.material) ? node.material : [node.material];
-            mats.forEach(m => {
-                if (m.emissive) {
-                    m.emissive.setHex(hexColor);
-                    m.emissiveIntensity = (intensity === undefined) ? 1.0 : intensity;
-                }
-            });
-        }
-    });
-}
-
-// ============================= CAMPAIGN =============================
-const LEVELS = [
-    {
-        id: 1, name: "I: ASHVEIL DUNES", title: "ASHVEIL DUNES", env: 'desert',
-        objective: "Purge the Vanguard", brief: "Hive vanguard staging in the ash wastes. Scatter them before the storm turns.",
-        aiScaling: 0.3, requiredKills: 12, timeLimit: 240,
-        fogColor: 0xc99e66, fogDensity: 0.0055, skyTop: 0x2b3a52, skyBottom: 0xe8a45f,
-        sunColor: 0xffd9a0, sunIntensity: 1.35, hemiSky: 0xffd3a0, hemiGround: 0x5c4326, ambient: 0.42,
-        enemyTint: 0xff5a2a, weather: 'sand', ambientSound: 'wind-dry'
-    },
-    {
-        id: 2, name: "II: FOUNDRY TRENCH", title: "FOUNDRY TRENCH", env: 'trench',
-        objective: "Collapse the Line", brief: "The enemy forges reinforcements deep in the trench. Break their line at the anvil.",
-        aiScaling: 0.65, requiredKills: 22, timeLimit: 200,
-        fogColor: 0x241009, fogDensity: 0.010, skyTop: 0x0a0505, skyBottom: 0x5e1f0c,
-        sunColor: 0xff8a4d, sunIntensity: 0.7, hemiSky: 0xff9a5c, hemiGround: 0x1a0a06, ambient: 0.3,
-        enemyTint: 0xff2a2a, weather: 'embers', ambientSound: 'rumble'
-    },
-    {
-        id: 3, name: "III: KHAROS SUMMIT", title: "KHAROS SUMMIT", env: 'snow',
-        objective: "Silence the Sovereign", brief: "ZYXAR waits above the snowline, wrapped in the last of the fleet. End the war.",
-        aiScaling: 0.9, requiredKills: 1, isBoss: true, timeLimit: 180,
-        fogColor: 0xbcd2e6, fogDensity: 0.0075, skyTop: 0x18304a, skyBottom: 0xd7e8f5,
-        sunColor: 0xeaf4ff, sunIntensity: 1.15, hemiSky: 0xdcecff, hemiGround: 0x6d7f96, ambient: 0.5,
-        enemyTint: 0x4fb8ff, weather: 'snow', ambientSound: 'wind-cold'
-    }
-];
-let levelKills = 0;
-
-// --- DOM ---
-const uiLayer = document.getElementById('ui-layer');
-const startScreen = document.getElementById('start-screen');
-const gameOverScreen = document.getElementById('game-over-screen');
-const pauseScreen = document.getElementById('pause-screen');
-const levelCard = document.getElementById('level-card');
-const healthBar = document.getElementById('health-bar');
-const neuralBar = document.getElementById('neural-bar');
-const heatBar = document.getElementById('heat-bar');
-const heatStatus = document.getElementById('heat-status');
-const scoreDisplay = document.getElementById('score-display');
-const levelDisplay = document.getElementById('level-display');
-const objectiveDisplay = document.getElementById('objective-display');
-const timerDisplay = document.getElementById('timer-display');
-const killCountDisplay = document.getElementById('kill-count');
-const killBar = document.getElementById('kill-bar');
-const bossPanel = document.getElementById('boss-panel');
-const bossBar = document.getElementById('boss-bar');
-const dashRingFg = document.getElementById('dash-ring-fg');
-const dashStatus = document.getElementById('dash-status');
-const reticle = document.getElementById('reticle');
-const hitMarker = document.getElementById('hit-marker');
-const hitFlash = document.getElementById('hit-flash');
-const levelFlash = document.getElementById('level-flash');
-const dashFlash = document.getElementById('dash-flash');
-const lowHealthVig = document.getElementById('low-health-vig');
-const floatingLayer = document.getElementById('floating-layer');
-const hazeEl = document.getElementById('haze');
-const minimapCanvas = document.getElementById('minimap');
-const minimapCtx = minimapCanvas.getContext('2d');
-
-// ============================= THREE.JS SETUP =============================
-const canvas = document.getElementById('game-canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.outputEncoding = THREE.sRGBEncoding;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(LEVELS[0].fogColor);
-scene.fog = new THREE.FogExp2(LEVELS[0].fogColor, LEVELS[0].fogDensity);
-
-const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 1, 1600);
-const cameraOffset = new THREE.Vector3(0, 54, 72); // third-person chase, scaled to mech world
-const FIRST_PERSON_FOV = 70;
-const THIRD_PERSON_FOV = 38;
-const FIRST_PERSON_EYE_HEIGHT = PLAYER_TARGET_HEIGHT * 0.86; // cockpit at head height
-let cameraMode = 'third';
-camera.position.copy(cameraOffset);
-
-// Real-time reflection probe so metallic hulls / armor pick up environment
-// reflections without extra example scripts. Deferred update pattern (kept
-// from the Koru fix) so a CubeCamera call never silently halts init.
-const envCubeRT = new THREE.WebGLCubeRenderTarget(256, { format: THREE.RGBFormat, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
-const envCubeCamera = new THREE.CubeCamera(0.5, 800, envCubeRT);
-scene.add(envCubeCamera);
-scene.environment = envCubeRT.texture;
-let envMapDirty = true;
-
-// ---- Optional SSAO, loaded defensively; silent fallback offline.
-let composer = null, ssaoPass = null, renderPass = null;
-function loadScriptOnce(src){
-    return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src; s.onload = () => resolve(); s.onerror = () => reject(new Error('failed: ' + src));
-        document.head.appendChild(s);
-    });
-}
-(async function initPostProcessing(){
-    const base = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/';
-    try {
-        await loadScriptOnce(base + 'postprocessing/EffectComposer.js');
-        await loadScriptOnce(base + 'postprocessing/RenderPass.js');
-        await loadScriptOnce(base + 'shaders/CopyShader.js');
-        await loadScriptOnce(base + 'postprocessing/ShaderPass.js');
-        await loadScriptOnce(base + 'shaders/SSAOShader.js');
-        await loadScriptOnce(base + 'postprocessing/SSAOPass.js');
-        if (THREE.EffectComposer && THREE.SSAOPass) {
-            composer = new THREE.EffectComposer(renderer);
-            renderPass = new THREE.RenderPass(scene, camera);
-            composer.addPass(renderPass);
-            ssaoPass = new THREE.SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
-            ssaoPass.kernelRadius = 12;
-            ssaoPass.minDistance = 0.002;
-            ssaoPass.maxDistance = 0.25;
-            composer.addPass(ssaoPass);
-            composer.setSize(window.innerWidth, window.innerHeight);
-            console.log('[SENTINEL] SSAO post-processing online.');
-        }
-    } catch (err) {
-        console.warn('[SENTINEL] SSAO unavailable, standard render path.', err);
-        composer = null;
-    }
-})();
-
-// ---- Lights (retuned per level in applyEnvironment)
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.42);
-scene.add(ambientLight);
-const hemiLight = new THREE.HemisphereLight(0xffd3a0, 0x5c4326, 0.6);
-hemiLight.position.set(0, 200, 0);
-scene.add(hemiLight);
-const dirLight = new THREE.DirectionalLight(0xffd9a0, 1.35);
-dirLight.position.set(90, 160, 90);
-dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 2048;
-dirLight.shadow.mapSize.height = 2048;
-dirLight.shadow.camera.near = 0.5;
-dirLight.shadow.camera.far = 500;
-dirLight.shadow.camera.left = -110;
-dirLight.shadow.camera.right = 110;
-dirLight.shadow.camera.top = 110;
-dirLight.shadow.camera.bottom = -110;
-scene.add(dirLight);
-const rimLight = new THREE.PointLight(0x4fd1c5, 0.7, 120);
-rimLight.position.set(0, 26, 0);
-scene.add(rimLight);
-
-// ============================= PROCEDURAL AUDIO =============================
-// WebAudio synth layer: zero external assets, initialized on first user gesture.
-const AudioSys = {
-    ctx: null, master: null, ambGain: null, ambNodes: [], noiseBuf: null,
-    init() {
-        if (this.ctx) return;
-        try {
-            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-            this.master = this.ctx.createGain();
-            this.master.gain.value = 0.5;
-            this.master.connect(this.ctx.destination);
-            this.ambGain = this.ctx.createGain();
-            this.ambGain.gain.value = 0.0;
-            this.ambGain.connect(this.master);
-            const len = this.ctx.sampleRate * 2;
-            this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-            const d = this.noiseBuf.getChannelData(0);
-            for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-        } catch (e) { console.warn('[SENTINEL] Audio unavailable.', e); }
-    },
-    resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
-    _noise(dur, filterType, freq, q, gain, attack) {
-        if (!this.ctx) return;
-        const t = this.ctx.currentTime;
-        const src = this.ctx.createBufferSource();
-        src.buffer = this.noiseBuf;
-        src.loop = true;
-        const f = this.ctx.createBiquadFilter();
-        f.type = filterType; f.frequency.value = freq; f.Q.value = q || 1;
-        const g = this.ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(gain, t + (attack || 0.005));
-        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        src.connect(f); f.connect(g); g.connect(this.master);
-        src.start(t); src.stop(t + dur + 0.05);
-    },
-    _tone(type, f0, f1, dur, gain) {
-        if (!this.ctx) return;
-        const t = this.ctx.currentTime;
-        const o = this.ctx.createOscillator();
-        o.type = type;
-        o.frequency.setValueAtTime(f0, t);
-        o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
-        const g = this.ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(gain, t + 0.008);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        o.connect(g); g.connect(this.master);
-        o.start(t); o.stop(t + dur + 0.05);
-    },
-    fire()      { this._noise(0.12, 'bandpass', 1800, 2.5, 0.22); this._tone('square', 340, 90, 0.10, 0.10); },
-    impact()    { this._noise(0.08, 'highpass', 2400, 1, 0.12); },
-    explosion() { this._noise(0.7, 'lowpass', 380, 0.7, 0.5, 0.01); this._tone('sine', 110, 30, 0.5, 0.30); },
-    bossDown()  { this._noise(1.4, 'lowpass', 300, 0.7, 0.6, 0.02); this._tone('sine', 80, 20, 1.1, 0.4); },
-    dash()      { this._noise(0.28, 'bandpass', 900, 1.2, 0.20, 0.02); },
-    jump()      { this._noise(0.22, 'bandpass', 600, 1.0, 0.14, 0.02); },
-    step()      { this._tone('sine', 78, 40, 0.10, 0.16); this._noise(0.05, 'lowpass', 400, 1, 0.06); },
-    vent()      { this._noise(0.9, 'highpass', 3200, 0.8, 0.16, 0.05); },
-    overheat()  { this._tone('sawtooth', 220, 60, 0.4, 0.10); },
-    hurt()      { this._tone('sawtooth', 160, 50, 0.22, 0.14); },
-    ui()        { this._tone('square', 660, 660, 0.06, 0.06); },
-    sting()     { this._tone('square', 392, 392, 0.12, 0.08); setTimeout(()=>this._tone('square', 523, 523, 0.12, 0.08), 130); setTimeout(()=>this._tone('square', 784, 784, 0.22, 0.10), 260); },
-    setAmbient(type) {
-        if (!this.ctx) return;
-        this.ambNodes.forEach(n => { try { n.stop(); } catch(e){} });
-        this.ambNodes = [];
-        this.ambGain.gain.cancelScheduledValues(this.ctx.currentTime);
-        this.ambGain.gain.setTargetAtTime(0.12, this.ctx.currentTime, 0.8);
-        const src = this.ctx.createBufferSource();
-        src.buffer = this.noiseBuf; src.loop = true;
-        const f = this.ctx.createBiquadFilter();
-        if (type === 'wind-dry')       { f.type = 'bandpass'; f.frequency.value = 480; f.Q.value = 0.6; }
-        else if (type === 'wind-cold') { f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.9; }
-        else                           { f.type = 'lowpass';  f.frequency.value = 140; f.Q.value = 0.7; } // forge rumble
-        // slow LFO on the filter for gusting
-        const lfo = this.ctx.createOscillator();
-        lfo.frequency.value = 0.07;
-        const lfoGain = this.ctx.createGain();
-        lfoGain.gain.value = f.frequency.value * 0.45;
-        lfo.connect(lfoGain); lfoGain.connect(f.frequency);
-        src.connect(f); f.connect(this.ambGain);
-        src.start(); lfo.start();
-        this.ambNodes = [src, lfo];
-    },
-    stopAmbient() {
-        if (!this.ctx) return;
-        this.ambGain.gain.setTargetAtTime(0.0, this.ctx.currentTime, 0.5);
     }
 };
 
-// ---- Optional custom soundtrack: drop a 'sentinel.mp3' next to index.html.
-// If it loads, it replaces the procedural ambient bed; if absent, the synth
-// ambient carries the soundscape exactly as before. No error surfaces either way.
-const BGM = {
-    el: null, playing: false, available: false,
-    init() {
-        if (this.el) return;
-        this.el = new Audio('sentinel.mp3');
-        this.el.loop = true;
-        this.el.volume = 0.35;
-        this.el.preload = 'auto';
-        this.el.addEventListener('canplaythrough', () => { this.available = true; });
-        this.el.addEventListener('error', () => { this.available = false; this.playing = false; });
-    },
-    start() {
-        this.init();
-        const p = this.el.play();
-        if (p && p.then) {
-            p.then(() => {
-                this.playing = true;
-                AudioSys.stopAmbient(); // custom track owns the bed
-            }).catch(() => { this.playing = false; }); // missing file / autoplay block: synth ambient continues
-        }
-    },
-    pause()  { if (this.el && this.playing) this.el.pause(); },
-    resume() { if (this.el && this.playing) this.el.play().catch(() => {}); }
-};
-
-// ============================= PROCEDURAL GROUND TEXTURES =============================
-// Canvas-generated per environment: no external image dependencies.
-function makeGroundTexture(env) {
-    const S = 512;
-    const c = document.createElement('canvas');
-    c.width = S; c.height = S;
-    const g = c.getContext('2d');
-    let emissiveCanvas = null;
-
-    function noiseFill(base, varAmt, cells) {
-        const cell = S / cells;
-        for (let y = 0; y < cells; y++) {
-            for (let x = 0; x < cells; x++) {
-                const v = (Math.random() - 0.5) * varAmt;
-                g.fillStyle = `rgb(${Math.max(0,Math.min(255,base[0]+v))|0},${Math.max(0,Math.min(255,base[1]+v))|0},${Math.max(0,Math.min(255,base[2]+v))|0})`;
-                g.fillRect(x * cell, y * cell, cell + 1, cell + 1);
-            }
-        }
+// gamepad sticks: left = move, right = aim, RT/R1/A = fire, LB/X = dash, Y = vent
+const padState = { move: new THREE.Vector2(), aim: new THREE.Vector2(), aimActive: false };
+let padPrev = { jump: false, dash: false, vent: false, cam: false };
+function pollGamepad() {
+    const pad = Haptics.poll();
+    padState.aimActive = false;
+    if (!pad) { padState.move.set(0, 0); return; }
+    const dz = v => Math.abs(v) > 0.18 ? v : 0;
+    padState.move.set(dz(pad.axes[0] || 0), dz(pad.axes[1] || 0));
+    const ax = dz(pad.axes[2] || 0), ay = dz(pad.axes[3] || 0);
+    if (ax !== 0 || ay !== 0) { padState.aim.set(ax, ay); padState.aimActive = true; }
+    const btn = i => !!(pad.buttons[i] && pad.buttons[i].pressed);
+    isShooting = isShooting || btn(7) || btn(5) || btn(0);       // RT / RB / A
+    if (currentState === GAME_STATE.PLAYING && player) {
+        if (btn(1)) keys.space = true;                            // B -> jump jets
+        else if (padPrev.jump) keys.space = false;                // release only what the pad pressed
+        if (btn(4) && !padPrev.dash) mobileDashRequest = true;    // LB -> drive burst
+        if (btn(3) && !padPrev.vent) player.ventHeat();           // Y -> vent heat
+        if (btn(9) && !padPrev.cam) toggleCameraMode();           // menu btn -> camera
     }
-    function crackWalk(ctx2, count, color, width, glow) {
-        ctx2.strokeStyle = color;
-        ctx2.lineWidth = width;
-        ctx2.lineCap = 'round';
-        if (glow) { ctx2.shadowColor = color; ctx2.shadowBlur = 6; }
-        for (let i = 0; i < count; i++) {
-            let x = Math.random() * S, y = Math.random() * S;
-            let ang = Math.random() * Math.PI * 2;
-            ctx2.beginPath();
-            ctx2.moveTo(x, y);
-            const segs = 6 + (Math.random() * 10) | 0;
-            for (let s = 0; s < segs; s++) {
-                ang += (Math.random() - 0.5) * 1.2;
-                x += Math.cos(ang) * (8 + Math.random() * 22);
-                y += Math.sin(ang) * (8 + Math.random() * 22);
-                ctx2.lineTo(x, y);
-            }
-            ctx2.stroke();
-        }
-        ctx2.shadowBlur = 0;
-    }
-
-    if (env === 'desert') {
-        noiseFill([168, 128, 84], 34, 64);
-        crackWalk(g, 46, 'rgba(62,42,24,0.85)', 2.2, false);   // dry cracked mud
-        crackWalk(g, 30, 'rgba(90,64,38,0.6)', 1.1, false);
-    } else if (env === 'trench') {
-        noiseFill([38, 27, 24], 22, 64);
-        crackWalk(g, 26, 'rgba(12,8,7,0.9)', 3, false);
-        // emissive magma seams on a separate canvas
-        const ec = document.createElement('canvas');
-        ec.width = S; ec.height = S;
-        const eg = ec.getContext('2d');
-        eg.fillStyle = '#000'; eg.fillRect(0, 0, S, S);
-        crackWalk(eg, 18, 'rgba(255,120,40,0.95)', 2.4, true);
-        crackWalk(eg, 10, 'rgba(255,60,20,0.8)', 1.2, true);
-        emissiveCanvas = ec;
-        // mirror faint seams onto the base so cracks read in shadow too
-        g.globalAlpha = 0.5; g.drawImage(ec, 0, 0); g.globalAlpha = 1;
-    } else { // snow
-        noiseFill([214, 226, 238], 18, 64);
-        crackWalk(g, 20, 'rgba(150,175,205,0.5)', 1.6, false);  // wind scour streaks
-        crackWalk(g, 14, 'rgba(255,255,255,0.65)', 2.6, false); // drift ridges
-    }
-
-    const tex = new THREE.CanvasTexture(c);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(9, 9);
-    let emissiveTex = null;
-    if (emissiveCanvas) {
-        emissiveTex = new THREE.CanvasTexture(emissiveCanvas);
-        emissiveTex.wrapS = emissiveTex.wrapT = THREE.RepeatWrapping;
-        emissiveTex.repeat.set(9, 9);
-    }
-    return { map: tex, emissiveMap: emissiveTex };
+    padPrev = { jump: btn(1), dash: btn(4), vent: btn(3), cam: btn(9) };
 }
 
-// Gradient skydome (BackSide sphere, fog-immune) per environment.
-function makeSkyTexture(top, bottom) {
-    const c = document.createElement('canvas');
-    c.width = 4; c.height = 256;
-    const g = c.getContext('2d');
-    const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, '#' + top.toString(16).padStart(6, '0'));
-    grad.addColorStop(1, '#' + bottom.toString(16).padStart(6, '0'));
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 4, 256);
-    const tex = new THREE.CanvasTexture(c);
-    return tex;
+// ============================= MOBILE CONTROLS =============================
+// Left thumb: virtual joystick (or full-device TILT — lean the phone to walk).
+// Right thumb / free screen: touch to aim, hold to fire. Buttons: JUMP / BURST / VENT.
+const touchMove = new THREE.Vector2(); // analog move injected into Player.update
+let mobileDashRequest = false;
+let tiltEnabled = false;
+let tiltBase = { beta: 40, gamma: 0 };
+let lastTiltEvent = null;
+
+const joyZone = document.getElementById('joy-zone');
+const joyBase = document.getElementById('joy-base');
+const joyKnob = document.getElementById('joy-knob');
+let joyId = null, joyOrigin = { x: 0, y: 0 };
+const JOY_RADIUS = 46;
+
+function setJoyKnob(dx, dy) {
+    joyKnob.style.left = (33 + dx) + 'px';
+    joyKnob.style.top = (33 + dy) + 'px';
 }
-
-// ============================= ENVIRONMENT SYSTEM =============================
-// One rebuildable group per level; teardown disposes geometry/materials so
-// three level swaps never leak GPU memory. Obstacles rebuilt alongside.
-const obstacles = []; // { x, z, radius, blocksProjectiles }
-let envGroup = null;
-let skyDome = null;
-let ground = null;
-
-const groundGeo = new THREE.PlaneGeometry(ARENA_SIZE, ARENA_SIZE);
-ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color: 0xffffff }));
-ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
-scene.add(ground);
-
-skyDome = new THREE.Mesh(
-    new THREE.SphereGeometry(760, 24, 12),
-    new THREE.MeshBasicMaterial({ side: THREE.BackSide, fog: false, depthWrite: false })
-);
-scene.add(skyDome);
-
-function disposeObject(obj) {
-    obj.traverse((n) => {
-        if (n.isMesh || n.isPoints) {
-            if (n.geometry) n.geometry.dispose();
-            if (n.material) {
-                const mats = Array.isArray(n.material) ? n.material : [n.material];
-                mats.forEach(m => {
-                    if (m.map) m.map.dispose();
-                    if (m.emissiveMap) m.emissiveMap.dispose();
-                    m.dispose();
-                });
-            }
+if (joyZone) {
+    joyZone.addEventListener('touchstart', (e) => {
+        if (tiltEnabled) return;
+        const t = e.changedTouches[0];
+        joyId = t.identifier;
+        joyOrigin = { x: t.clientX, y: t.clientY };
+        joyBase.style.display = 'block';
+        joyBase.style.left = (t.clientX - 59) + 'px';
+        joyBase.style.top = (t.clientY - 59) + 'px';
+        setJoyKnob(0, 0);
+        e.preventDefault();
+    }, { passive: false });
+    joyZone.addEventListener('touchmove', (e) => {
+        for (const t of e.changedTouches) {
+            if (t.identifier !== joyId) continue;
+            let dx = t.clientX - joyOrigin.x, dy = t.clientY - joyOrigin.y;
+            const len = Math.hypot(dx, dy);
+            if (len > JOY_RADIUS) { dx = dx / len * JOY_RADIUS; dy = dy / len * JOY_RADIUS; }
+            setJoyKnob(dx, dy);
+            touchMove.set(dx / JOY_RADIUS, dy / JOY_RADIUS);
         }
-    });
-}
-
-function clearEnvironment() {
-    if (envGroup) {
-        scene.remove(envGroup);
-        disposeObject(envGroup);
-        envGroup = null;
-    }
-    obstacles.length = 0;
-    clearWeather();
-    clearDecals();
-}
-
-// Poisson-ish scatter shared by all builders.
-function makeScatterer(placed) {
-    return function tryPlace(minR, maxR, minDist) {
-        for (let attempt = 0; attempt < 25; attempt++) {
-            const angle = Math.random() * Math.PI * 2;
-            const r = minR + Math.random() * (maxR - minR);
-            const x = Math.cos(angle) * r;
-            const z = Math.sin(angle) * r;
-            let ok = true;
-            for (let i = 0; i < placed.length; i++) {
-                const p = placed[i];
-                const dx = p.x - x, dz = p.z - z;
-                if (dx * dx + dz * dz < minDist * minDist) { ok = false; break; }
-            }
-            if (ok) { const pos = { x, z }; placed.push(pos); return pos; }
+        e.preventDefault();
+    }, { passive: false });
+    const joyEnd = (e) => {
+        for (const t of e.changedTouches) {
+            if (t.identifier !== joyId) continue;
+            joyId = null;
+            touchMove.set(0, 0);
+            joyBase.style.display = 'none';
         }
-        return null;
     };
+    joyZone.addEventListener('touchend', joyEnd);
+    joyZone.addEventListener('touchcancel', joyEnd);
 }
 
-// ---- FRONT 01: ASHVEIL DUNES — cracked pans, dune mounds, rock spires
-function buildDesert(group) {
-    const placed = [];
-    const tryPlace = makeScatterer(placed);
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.92, flatShading: true });
-    const duneMat = new THREE.MeshStandardMaterial({ color: 0xc59a63, roughness: 1.0, flatShading: true });
+// touch aim + tap-to-shoot on the free screen area (canvas layer)
+let aimTouchId = null;
+function touchToAim(t) {
+    mouse.x = (t.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(t.clientY / window.innerHeight) * 2 + 1;
+    reticle.style.left = t.clientX + 'px';
+    reticle.style.top = t.clientY + 'px';
+}
+document.addEventListener('touchstart', (e) => {
+    if (currentState !== GAME_STATE.PLAYING) return;
+    for (const t of e.changedTouches) {
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        if (el && (el.closest('#joy-zone') || el.closest('.touch-btn') || el.closest('#hud-select') || el.closest('#tilt-cal'))) continue;
+        aimTouchId = t.identifier;
+        touchToAim(t);
+        isShooting = true; // tap to shoot, hold to keep firing
+    }
+}, { passive: true });
+document.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+        if (t.identifier === aimTouchId) touchToAim(t);
+    }
+}, { passive: true });
+const aimEnd = (e) => {
+    for (const t of e.changedTouches) {
+        if (t.identifier === aimTouchId) { aimTouchId = null; isShooting = false; }
+    }
+};
+document.addEventListener('touchend', aimEnd);
+document.addEventListener('touchcancel', aimEnd);
 
-    // dune mounds — squashed spheres, movement blockers but shootable-over
-    for (let i = 0; i < 26; i++) {
-        const pos = tryPlace(34, WORLD_BOUND + 8, 22);
-        if (!pos) continue;
-        const r = 9 + Math.random() * 15;
-        const dune = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 7), duneMat);
-        dune.scale.y = 0.22 + Math.random() * 0.1;
-        dune.position.set(pos.x, 0, pos.z);
-        dune.receiveShadow = true;
-        group.add(dune);
-        obstacles.push({ x: pos.x, z: pos.z, radius: r * 0.55, blocksProjectiles: false });
+// touch buttons
+function bindTouchBtn(id, down, up) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); down(); }, { passive: false });
+    if (up) {
+        el.addEventListener('touchend', (e) => { e.preventDefault(); up(); }, { passive: false });
+        el.addEventListener('touchcancel', () => up());
     }
-    // rock spires — hard cover, block projectiles
-    for (let i = 0; i < 30; i++) {
-        const pos = tryPlace(26, WORLD_BOUND, 15);
-        if (!pos) continue;
-        const h = 7 + Math.random() * 13;
-        const spire = new THREE.Mesh(new THREE.DodecahedronGeometry(2.4 + Math.random() * 2.2, 0), rockMat);
-        spire.scale.y = h / 4;
-        spire.position.set(pos.x, h * 0.32, pos.z);
-        spire.rotation.y = Math.random() * Math.PI * 2;
-        spire.castShadow = true; spire.receiveShadow = true;
-        group.add(spire);
-        obstacles.push({ x: pos.x, z: pos.z, radius: 3.2, blocksProjectiles: true });
+}
+bindTouchBtn('btn-jump', () => { keys.space = true; }, () => { keys.space = false; });
+bindTouchBtn('btn-dash', () => { mobileDashRequest = true; });
+bindTouchBtn('btn-vent', () => { if (player) player.ventHeat(); });
+
+// TILT: lean the device — left/right strafes, forward/back drives the frame
+function handleOrientation(e) {
+    lastTiltEvent = e;
+    if (!tiltEnabled) return;
+    const beta = e.beta === null ? tiltBase.beta : e.beta;   // fwd/back
+    const gamma = e.gamma === null ? tiltBase.gamma : e.gamma; // left/right
+    const fb = THREE.MathUtils.clamp((beta - tiltBase.beta) / 22, -1, 1);
+    const lr = THREE.MathUtils.clamp((gamma - tiltBase.gamma) / 22, -1, 1);
+    const dead = v => Math.abs(v) > 0.14 ? v : 0;
+    touchMove.set(dead(lr), dead(fb));
+}
+window.addEventListener('deviceorientation', handleOrientation);
+
+function calibrateTilt() {
+    if (lastTiltEvent) {
+        tiltBase.beta = lastTiltEvent.beta === null ? 40 : lastTiltEvent.beta;
+        tiltBase.gamma = lastTiltEvent.gamma === null ? 0 : lastTiltEvent.gamma;
     }
-    // distant mega-dunes framing the horizon (outside play bounds, no collision)
-    for (let i = 0; i < 14; i++) {
-        const angle = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
-        const r = 260 + Math.random() * 130;
-        const mega = new THREE.Mesh(new THREE.SphereGeometry(70 + Math.random() * 70, 10, 7), duneMat);
-        mega.scale.y = 0.24;
-        mega.position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
-        group.add(mega);
-    }
-    // sun-bleached skeletal frames (dead flora) — atmosphere only
-    const boneMat = new THREE.MeshStandardMaterial({ color: 0xd8c8a8, roughness: 0.85 });
-    for (let i = 0; i < 12; i++) {
-        const pos = tryPlace(40, WORLD_BOUND, 18);
-        if (!pos) continue;
-        const rib = new THREE.Group();
-        const n = 3 + (Math.random() * 3) | 0;
-        for (let k = 0; k < n; k++) {
-            const bone = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 8 + Math.random() * 5, 5), boneMat);
-            bone.position.x = k * 1.6;
-            bone.rotation.z = 0.5 + Math.random() * 0.5;
-            bone.castShadow = true;
-            rib.add(bone);
+}
+const tiltCalBtn = document.getElementById('tilt-cal');
+if (tiltCalBtn) tiltCalBtn.addEventListener('touchstart', (e) => { e.preventDefault(); calibrateTilt(); AudioSys.ui(); }, { passive: false });
+
+async function toggleTilt() {
+    if (!tiltEnabled) {
+        // iOS requires an explicit permission grant from a user gesture
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+                const res = await DeviceOrientationEvent.requestPermission();
+                if (res !== 'granted') return;
+            } catch (err) { return; }
         }
-        rib.position.set(pos.x, 2.5, pos.z);
-        rib.rotation.y = Math.random() * Math.PI * 2;
-        group.add(rib);
+        tiltEnabled = true;
+        setTimeout(calibrateTilt, 400); // grab a natural holding angle as neutral
+    } else {
+        tiltEnabled = false;
+        touchMove.set(0, 0);
     }
-    hazeEl.style.background = 'radial-gradient(ellipse at 50% 68%, rgba(255,150,60,0.16) 0%, rgba(255,150,60,0.04) 45%, rgba(255,150,60,0) 75%)';
+    document.body.classList.toggle('tilt-on', tiltEnabled);
+    const v = document.getElementById('tog-tilt-v');
+    if (v) v.innerText = tiltEnabled ? 'ON' : 'OFF';
+    document.getElementById('tog-tilt').classList.toggle('on', tiltEnabled);
 }
-
-// ---- FRONT 02: FOUNDRY TRENCH — forged rock walls, pylons, magma seams
-function buildTrench(group) {
-    const placed = [];
-    const tryPlace = makeScatterer(placed);
-    const forgeMat = new THREE.MeshStandardMaterial({ color: 0x2a201c, roughness: 0.6, metalness: 0.55, flatShading: true });
-    const slagMat = new THREE.MeshStandardMaterial({ color: 0x201512, roughness: 0.95, flatShading: true });
-    const glowMat = new THREE.MeshStandardMaterial({ color: 0x1a0d08, emissive: 0xff5a1a, emissiveIntensity: 1.6, roughness: 0.6 });
-
-    // twin trench walls: broken segments along +X/-X flanks, channeling the arena
-    for (const side of [-1, 1]) {
-        let z = -WORLD_BOUND - 20;
-        while (z < WORLD_BOUND + 20) {
-            const segLen = 22 + Math.random() * 26;
-            const h = 16 + Math.random() * 18;
-            const gapChance = Math.random();
-            if (gapChance > 0.22) { // 78% wall, 22% breach gap
-                const wall = new THREE.Mesh(new THREE.BoxGeometry(10 + Math.random() * 6, h, segLen), forgeMat);
-                const x = side * (WORLD_BOUND * 0.72 + Math.random() * 14);
-                wall.position.set(x, h / 2 - 1.5, z + segLen / 2);
-                wall.rotation.y = (Math.random() - 0.5) * 0.14;
-                wall.castShadow = true; wall.receiveShadow = true;
-                group.add(wall);
-                // glowing seam strip on the inner face
-                const seam = new THREE.Mesh(new THREE.BoxGeometry(0.4, h * 0.5, segLen * 0.7), glowMat);
-                seam.position.set(x - side * 5.4, h * 0.35, z + segLen / 2);
-                group.add(seam);
-                // wall segments block movement AND shots — sample as several circles
-                const steps = Math.ceil(segLen / 9);
-                for (let s = 0; s < steps; s++) {
-                    obstacles.push({ x: x, z: z + (s + 0.5) * (segLen / steps), radius: 6.5, blocksProjectiles: true });
-                }
-            }
-            z += segLen + 4;
-        }
-    }
-    // forge pylons with emissive rings — cover inside the trench
-    for (let i = 0; i < 22; i++) {
-        const pos = tryPlace(24, WORLD_BOUND * 0.62, 20);
-        if (!pos) continue;
-        const h = 12 + Math.random() * 10;
-        const py = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.6, h, 6), forgeMat);
-        py.position.set(pos.x, h / 2, pos.z);
-        py.castShadow = true; py.receiveShadow = true;
-        group.add(py);
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(2.7, 0.28, 6, 14), glowMat);
-        ring.rotation.x = Math.PI / 2;
-        ring.position.set(pos.x, h * 0.72, pos.z);
-        group.add(ring);
-        obstacles.push({ x: pos.x, z: pos.z, radius: 2.9, blocksProjectiles: true });
-    }
-    // slag heaps — low cover, movement only
-    for (let i = 0; i < 24; i++) {
-        const pos = tryPlace(20, WORLD_BOUND * 0.8, 13);
-        if (!pos) continue;
-        const heap = new THREE.Mesh(new THREE.DodecahedronGeometry(2.4 + Math.random() * 2.6, 0), slagMat);
-        heap.scale.y = 0.55;
-        heap.position.set(pos.x, 1.0, pos.z);
-        heap.rotation.set(Math.random(), Math.random() * Math.PI * 2, Math.random() * 0.4);
-        heap.castShadow = true; heap.receiveShadow = true;
-        group.add(heap);
-        obstacles.push({ x: pos.x, z: pos.z, radius: 2.4, blocksProjectiles: false });
-    }
-    // girder arches spanning overhead
-    for (let i = 0; i < 6; i++) {
-        const z = -WORLD_BOUND + i * (WORLD_BOUND * 2 / 6) + Math.random() * 16;
-        const arch = new THREE.Mesh(new THREE.BoxGeometry(WORLD_BOUND * 1.5, 2.4, 3.2), forgeMat);
-        arch.position.set(0, 30 + Math.random() * 10, z);
-        arch.rotation.z = (Math.random() - 0.5) * 0.08;
-        group.add(arch);
-    }
-    hazeEl.style.background = 'radial-gradient(ellipse at 50% 75%, rgba(255,80,26,0.20) 0%, rgba(255,80,26,0.06) 45%, rgba(255,80,26,0) 75%)';
-}
-
-// ---- FRONT 03: KHAROS SUMMIT — ice shards, frosted spires, boulders
-function buildSnow(group) {
-    const placed = [];
-    const tryPlace = makeScatterer(placed);
-    const iceMat = new THREE.MeshStandardMaterial({ color: 0xbfe2f5, roughness: 0.25, metalness: 0.1, emissive: 0x1a3d4d, emissiveIntensity: 0.35, flatShading: true });
-    const boulderMat = new THREE.MeshStandardMaterial({ color: 0x8fa3b8, roughness: 0.9, flatShading: true });
-    const frostMat = new THREE.MeshStandardMaterial({ color: 0xdcecf8, roughness: 0.85, flatShading: true });
-
-    // crystalline ice shards — hard cover
-    for (let i = 0; i < 30; i++) {
-        const pos = tryPlace(26, WORLD_BOUND, 16);
-        if (!pos) continue;
-        const cluster = new THREE.Group();
-        const n = 2 + (Math.random() * 3) | 0;
-        for (let k = 0; k < n; k++) {
-            const h = 6 + Math.random() * 12;
-            const shard = new THREE.Mesh(new THREE.ConeGeometry(1.2 + Math.random() * 1.4, h, 5), iceMat);
-            shard.position.set((Math.random() - 0.5) * 3, h / 2, (Math.random() - 0.5) * 3);
-            shard.rotation.set((Math.random() - 0.5) * 0.3, Math.random() * Math.PI, (Math.random() - 0.5) * 0.3);
-            shard.castShadow = true;
-            cluster.add(shard);
-        }
-        cluster.position.set(pos.x, 0, pos.z);
-        group.add(cluster);
-        obstacles.push({ x: pos.x, z: pos.z, radius: 3.0, blocksProjectiles: true });
-    }
-    // frosted spire trees (stacked cones)
-    for (let i = 0; i < 26; i++) {
-        const pos = tryPlace(30, WORLD_BOUND, 17);
-        if (!pos) continue;
-        const tree = new THREE.Group();
-        const tiers = 3;
-        const baseH = 9 + Math.random() * 8;
-        for (let k = 0; k < tiers; k++) {
-            const tierR = (3.4 - k * 0.9) * (0.8 + Math.random() * 0.3);
-            const cone = new THREE.Mesh(new THREE.ConeGeometry(tierR, baseH * 0.45, 7), frostMat);
-            cone.position.y = baseH * 0.28 + k * baseH * 0.26;
-            cone.castShadow = true;
-            tree.add(cone);
-        }
-        tree.position.set(pos.x, 0, pos.z);
-        group.add(tree);
-        obstacles.push({ x: pos.x, z: pos.z, radius: 2.6, blocksProjectiles: true });
-    }
-    // snowbound boulders — movement only
-    for (let i = 0; i < 22; i++) {
-        const pos = tryPlace(20, WORLD_BOUND * 0.85, 13);
-        if (!pos) continue;
-        const b = new THREE.Mesh(new THREE.DodecahedronGeometry(2 + Math.random() * 2.4, 0), boulderMat);
-        b.scale.y = 0.7;
-        b.position.set(pos.x, 1.1, pos.z);
-        b.rotation.y = Math.random() * Math.PI * 2;
-        b.castShadow = true; b.receiveShadow = true;
-        group.add(b);
-        obstacles.push({ x: pos.x, z: pos.z, radius: 2.2, blocksProjectiles: false });
-    }
-    // ringing mountain peaks on the horizon
-    for (let i = 0; i < 12; i++) {
-        const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
-        const r = 300 + Math.random() * 160;
-        const peak = new THREE.Mesh(new THREE.ConeGeometry(60 + Math.random() * 60, 140 + Math.random() * 120, 6), frostMat);
-        peak.position.set(Math.cos(angle) * r, 30, Math.sin(angle) * r);
-        peak.rotation.y = Math.random() * Math.PI;
-        group.add(peak);
-    }
-    hazeEl.style.background = 'radial-gradient(ellipse at 50% 60%, rgba(140,190,255,0.14) 0%, rgba(140,190,255,0.04) 45%, rgba(140,190,255,0) 75%)';
-}
-
-function applyEnvironment(levelData) {
-    clearEnvironment();
-    envGroup = new THREE.Group();
-    scene.add(envGroup);
-
-    // ground surface
-    const texSet = makeGroundTexture(levelData.env);
-    const oldMat = ground.material;
-    ground.material = new THREE.MeshStandardMaterial({
-        map: texSet.map,
-        emissiveMap: texSet.emissiveMap || null,
-        emissive: texSet.emissiveMap ? new THREE.Color(0xff5a1a) : new THREE.Color(0x000000),
-        emissiveIntensity: texSet.emissiveMap ? 1.2 : 0,
-        roughness: levelData.env === 'snow' ? 0.45 : 0.85,
-        metalness: levelData.env === 'trench' ? 0.3 : 0.05,
-        envMapIntensity: levelData.env === 'snow' ? 1.0 : 0.5
-    });
-    if (oldMat.map) oldMat.map.dispose();
-    if (oldMat.emissiveMap) oldMat.emissiveMap.dispose();
-    oldMat.dispose();
-
-    // sky + fog + lights
-    const oldSky = skyDome.material.map;
-    skyDome.material.map = makeSkyTexture(levelData.skyTop, levelData.skyBottom);
-    skyDome.material.needsUpdate = true;
-    if (oldSky) oldSky.dispose();
-    scene.background = null; // skydome owns the backdrop
-    scene.fog.color.setHex(levelData.fogColor);
-    scene.fog.density = levelData.fogDensity;
-
-    ambientLight.intensity = levelData.ambient;
-    hemiLight.color.setHex(levelData.hemiSky);
-    hemiLight.groundColor.setHex(levelData.hemiGround);
-    dirLight.color.setHex(levelData.sunColor);
-    dirLight.intensity = levelData.sunIntensity;
-    dirLight.position.set(levelData.env === 'trench' ? -60 : 90, levelData.env === 'trench' ? 80 : 160, 90);
-    rimLight.color.setHex(levelData.env === 'trench' ? 0xff5a1a : 0x4fd1c5);
-
-    if (levelData.env === 'desert') buildDesert(envGroup);
-    else if (levelData.env === 'trench') buildTrench(envGroup);
-    else buildSnow(envGroup);
-
-    setWeather(levelData.weather);
-    if (!BGM.playing) AudioSys.setAmbient(levelData.ambientSound);
-    envMapDirty = true;
-}
-
-// ============================= WEATHER PARTICLES =============================
-// One THREE.Points system reconfigured per level; positions wrap in a volume
-// that recenters around the player each frame.
-const WEATHER_COUNT = 900;
-const WEATHER_BOX = { x: 140, y: 55, z: 140 };
-let weatherPoints = null;
-let weatherVel = null;
-let weatherType = null;
-
-function clearWeather() {
-    if (weatherPoints) {
-        scene.remove(weatherPoints);
-        weatherPoints.geometry.dispose();
-        weatherPoints.material.dispose();
-        weatherPoints = null;
-        weatherType = null;
-    }
-}
-function setWeather(type) {
-    clearWeather();
-    weatherType = type;
-    const positions = new Float32Array(WEATHER_COUNT * 3);
-    weatherVel = new Float32Array(WEATHER_COUNT * 3);
-    for (let i = 0; i < WEATHER_COUNT; i++) {
-        positions[i * 3]     = (Math.random() - 0.5) * WEATHER_BOX.x;
-        positions[i * 3 + 1] = Math.random() * WEATHER_BOX.y;
-        positions[i * 3 + 2] = (Math.random() - 0.5) * WEATHER_BOX.z;
-        if (type === 'sand') {
-            weatherVel[i * 3] = 22 + Math.random() * 14;
-            weatherVel[i * 3 + 1] = (Math.random() - 0.5) * 2;
-            weatherVel[i * 3 + 2] = (Math.random() - 0.5) * 5;
-        } else if (type === 'embers') {
-            weatherVel[i * 3] = (Math.random() - 0.5) * 2.5;
-            weatherVel[i * 3 + 1] = 3.5 + Math.random() * 4;
-            weatherVel[i * 3 + 2] = (Math.random() - 0.5) * 2.5;
-        } else { // snow
-            weatherVel[i * 3] = (Math.random() - 0.5) * 4 + 2;
-            weatherVel[i * 3 + 1] = -(4 + Math.random() * 5);
-            weatherVel[i * 3 + 2] = (Math.random() - 0.5) * 4;
-        }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({
-        color: type === 'sand' ? 0xd8a868 : (type === 'embers' ? 0xff7a2a : 0xf2f8ff),
-        size: type === 'embers' ? 0.55 : (type === 'snow' ? 0.5 : 0.4),
-        transparent: true,
-        opacity: type === 'sand' ? 0.55 : 0.85,
-        blending: type === 'embers' ? THREE.AdditiveBlending : THREE.NormalBlending,
-        depthWrite: false,
-        sizeAttenuation: true
-    });
-    weatherPoints = new THREE.Points(geo, mat);
-    weatherPoints.frustumCulled = false;
-    scene.add(weatherPoints);
-}
-function updateWeather(dt, center) {
-    if (!weatherPoints) return;
-    const pos = weatherPoints.geometry.attributes.position.array;
-    const hx = WEATHER_BOX.x / 2, hz = WEATHER_BOX.z / 2, hy = WEATHER_BOX.y;
-    for (let i = 0; i < WEATHER_COUNT; i++) {
-        let x = pos[i * 3] + weatherVel[i * 3] * dt;
-        let y = pos[i * 3 + 1] + weatherVel[i * 3 + 1] * dt;
-        let z = pos[i * 3 + 2] + weatherVel[i * 3 + 2] * dt;
-        if (weatherType === 'embers') {
-            x += Math.sin((y + i) * 0.6) * dt * 1.5; // flicker drift
-            if (y > hy) { y = 0.2; x = (Math.random() - 0.5) * WEATHER_BOX.x; z = (Math.random() - 0.5) * WEATHER_BOX.z; }
-        } else if (weatherType === 'snow') {
-            x += Math.sin((y * 0.35 + i)) * dt * 1.2;
-            if (y < 0.2) { y = hy; x = (Math.random() - 0.5) * WEATHER_BOX.x; z = (Math.random() - 0.5) * WEATHER_BOX.z; }
-        }
-        // wrap horizontally
-        if (x > hx) x -= WEATHER_BOX.x; if (x < -hx) x += WEATHER_BOX.x;
-        if (z > hz) z -= WEATHER_BOX.z; if (z < -hz) z += WEATHER_BOX.z;
-        if (weatherType === 'sand' && (y < 0.2 || y > hy)) y = Math.random() * hy;
-        pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
-    }
-    weatherPoints.geometry.attributes.position.needsUpdate = true;
-    weatherPoints.position.set(center.x, 0, center.z);
-}
-
-// ============================= SCORCH DECALS =============================
-const decals = [];
-const decalGeo = new THREE.CircleGeometry(1, 12);
-function spawnDecal(x, z, sizeMul, colorHex) {
-    let d = decals.find(dd => !dd.active);
-    if (!d) {
-        if (decals.length >= 28) d = decals[0];
-        else {
-            const mat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5, depthWrite: false });
-            const mesh = new THREE.Mesh(decalGeo, mat);
-            mesh.rotation.x = -Math.PI / 2;
-            mesh.visible = false;
-            scene.add(mesh);
-            d = { mesh, life: 0, active: false };
-            decals.push(d);
-        }
-    }
-    d.mesh.position.set(x, 0.06 + Math.random() * 0.03, z);
-    d.mesh.scale.setScalar((1.1 + Math.random() * 0.8) * (sizeMul || 1));
-    d.mesh.material.color.setHex(colorHex || 0x0d0d0d);
-    d.mesh.material.opacity = 0.55;
-    d.mesh.visible = true;
-    d.life = 6;
-    d.active = true;
-}
-function updateDecals(dt) {
-    for (let i = 0; i < decals.length; i++) {
-        const d = decals[i];
-        if (!d.active) continue;
-        d.life -= dt;
-        d.mesh.material.opacity = Math.min(0.55, d.life * 0.25);
-        if (d.life <= 0) { d.active = false; d.mesh.visible = false; }
-    }
-}
-function clearDecals() {
-    decals.forEach(d => { d.active = false; d.mesh.visible = false; });
-}
-
-// ============================= COLLISION / FX / POOLS =============================
-function resolveObstacleCollisions(entity) {
-    for (let i = 0; i < obstacles.length; i++) {
-        const o = obstacles[i];
-        const dx = entity.position.x - o.x;
-        const dz = entity.position.z - o.z;
-        const distSq = dx * dx + dz * dz;
-        const minDist = o.radius + entity.radius;
-        if (distSq < minDist * minDist && distSq > 0.0001) {
-            const dist = Math.sqrt(distSq);
-            const push = (minDist - dist);
-            entity.position.x += (dx / dist) * push;
-            entity.position.z += (dz / dist) * push;
-        }
-    }
-}
-
-// --- GLTF LOADERS ---
-const gltfLoader = new THREE.GLTFLoader();
-gltfLoader.load(
-    'blue.glb',
-    (gltf) => {
-        try {
-            sentinelGLB = gltf.scene;
-            sentinelAnimations = gltf.animations;
-            sentinelNaturalInfo = measureNaturalBBox(sentinelGLB);
-            console.log('[SENTINEL] blue.glb online. clips:', sentinelAnimations.map(c => c.name));
-        } catch (err) { console.warn('[SENTINEL] blue.glb measurement failed, using fallback frame.', err); sentinelGLB = null; }
-    },
-    undefined,
-    (error) => { console.warn('[SENTINEL] Could not load blue.glb. Falling back to procedural frame.', error); }
-);
-gltfLoader.load(
-    'ZYTHERON_CRAFT.glb',
-    (gltf) => {
-        try {
-            zytheronGLB = gltf.scene;
-            zytheronAnimations = gltf.animations;
-            zytheronNaturalInfo = measureNaturalBBox(zytheronGLB);
-        } catch (err) { console.warn('[SENTINEL] zytheroncraft.glb measurement failed.', err); zytheronGLB = null; }
-    },
-    undefined,
-    (error) => { console.warn('[SENTINEL] Could not load ZYTHERON_CRAFT.glb. Procedural fleet fallback.', error); }
-);
-
-// ============================= INPUT =============================
-const keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
-const mouse = new THREE.Vector2();
-let isShooting = false;
-
-window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyW') keys.w = true;
-    if (e.code === 'KeyA') keys.a = true;
-    if (e.code === 'KeyS') keys.s = true;
-    if (e.code === 'KeyD') keys.d = true;
-    if (e.code === 'Space') { keys.space = true; if (currentState === GAME_STATE.PLAYING) e.preventDefault(); }
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.shift = true;
-    if (e.code === 'KeyV' && currentState === GAME_STATE.PLAYING) toggleCameraMode();
-    if (e.code === 'KeyR' && currentState === GAME_STATE.PLAYING && player) player.ventHeat();
-    if (e.code === 'Escape') togglePause();
-});
-window.addEventListener('keyup', (e) => {
-    if (e.code === 'KeyW') keys.w = false;
-    if (e.code === 'KeyA') keys.a = false;
-    if (e.code === 'KeyS') keys.s = false;
-    if (e.code === 'KeyD') keys.d = false;
-    if (e.code === 'Space') keys.space = false;
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.shift = false;
-});
-
-const cameraModeLabel = document.getElementById('camera-mode-label');
-function toggleCameraMode() {
-    cameraMode = (cameraMode === 'third') ? 'first' : 'third';
-    camera.fov = (cameraMode === 'first') ? FIRST_PERSON_FOV : THIRD_PERSON_FOV;
-    camera.updateProjectionMatrix();
-    if (cameraModeLabel) cameraModeLabel.innerText = (cameraMode === 'first') ? '1ST PERSON' : '3RD PERSON';
-    if (typeof player !== 'undefined' && player && player.model) {
-        player.model.visible = (cameraMode !== 'first');
-    }
-}
-
-const raycaster = new THREE.Raycaster();
-const mousePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-let aimTarget = new THREE.Vector3();
-
-window.addEventListener('mousemove', (e) => {
-    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    reticle.style.left = e.clientX + 'px';
-    reticle.style.top = e.clientY + 'px';
-});
-window.addEventListener('mousedown', (e) => { if (e.button === 0) isShooting = true; });
-window.addEventListener('mouseup', (e) => { if (e.button === 0) isShooting = false; });
 
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+    if (fxaaPass) fxaaPass.material.uniforms.resolution.value.set(
+        1 / (window.innerWidth * renderer.getPixelRatio()),
+        1 / (window.innerHeight * renderer.getPixelRatio()));
 });
 
 function renderScene(){
@@ -3328,8 +2179,18 @@ function renderScene(){
         envCubeCamera.update(renderer, scene);
         envMapDirty = (frameCount % 90 === 0);
     }
-    if (composer) composer.render();
-    else renderer.render(scene, camera);
+    if (composer && gfxMode !== 'low') {
+        gfxTime += 1 / 60;
+        if (gradePass) gradePass.uniforms.time.value = gfxTime;
+        try { composer.render(); }
+        catch (err) {
+            console.warn('[SENTINEL] Composer failed at runtime, falling back to raw render.', err);
+            composer = null;
+            renderer.render(scene, camera);
+        }
+    } else {
+        renderer.render(scene, camera);
+    }
 }
 
 function checkHitRadius2D(posA, rA, posB, rB) {
@@ -3469,16 +2330,75 @@ function createProjectile() {
 }
 const projPool = new Pool(createProjectile, 160);
 
-function fireProjectile(origin, targetDir, speed, isPlayer, damage) {
+function fireProjectile(origin, targetDir, speed, isPlayer, damage, size) {
     const proj = projPool.get();
     if (proj) {
         proj.mesh.position.copy(origin);
         proj.mesh.material = isPlayer ? projMatPlayer : projMatEnemy;
         proj.mesh.visible = true;
+        proj.mesh.scale.setScalar(size || 1);
         proj.velocity.copy(targetDir).normalize().multiplyScalar(speed);
         proj.isPlayer = isPlayer;
-        proj.life = 2.5;
+        proj.life = 2.8;
+        proj.radius = 0.9 * (size || 1);
         proj.damage = (damage === undefined) ? (isPlayer ? 10 : 15) : damage;
+    }
+}
+
+// ============================= PHYSICS DEBRIS =============================
+// Hull chunks on kills: gravity, ground bounce, tumble, burn-out fade.
+const debrisGeo = new THREE.BoxGeometry(1, 1, 1);
+function createDebris() {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x2a2126, roughness: 0.55, metalness: 0.7, flatShading: true });
+    const mesh = new THREE.Mesh(debrisGeo, mat);
+    mesh.castShadow = true;
+    mesh.visible = false;
+    scene.add(mesh);
+    return { mesh, velocity: new THREE.Vector3(), angVel: new THREE.Vector3(), life: 0, baseScale: 1, active: false };
+}
+const debrisPool = new Pool(createDebris, 48);
+
+function spawnDebris(pos, colorHex, count, power) {
+    for (let i = 0; i < count; i++) {
+        const d = debrisPool.get();
+        if (!d) return;
+        d.mesh.position.copy(pos);
+        d.mesh.material.color.setHex(colorHex);
+        d.mesh.material.emissive.setHex(0xff5a1a);
+        d.mesh.material.emissiveIntensity = 0.8;
+        d.baseScale = 0.6 + Math.random() * 1.3;
+        d.mesh.scale.setScalar(d.baseScale);
+        d.mesh.visible = true;
+        const theta = Math.random() * Math.PI * 2;
+        d.velocity.set(Math.cos(theta), 0.8 + Math.random() * 0.9, Math.sin(theta))
+            .normalize().multiplyScalar(power * (0.5 + Math.random() * 0.7));
+        d.angVel.set((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9);
+        d.life = 2.4;
+    }
+}
+function updateDebris(dt) {
+    const active = debrisPool.getActive();
+    for (let i = 0; i < active.length; i++) {
+        const d = active[i];
+        d.velocity.y -= 42 * dt;
+        d.velocity.x += windNow.x * dt * 0.12; // wind carries light wreckage
+        d.velocity.z += windNow.z * dt * 0.12;
+        d.mesh.position.addScaledVector(d.velocity, dt);
+        d.mesh.rotation.x += d.angVel.x * dt;
+        d.mesh.rotation.y += d.angVel.y * dt;
+        d.mesh.rotation.z += d.angVel.z * dt;
+        const halfH = d.baseScale * 0.5;
+        if (d.mesh.position.y < halfH && d.velocity.y < 0) { // ground bounce
+            d.mesh.position.y = halfH;
+            d.velocity.y *= -0.42;
+            d.velocity.x *= 0.7; d.velocity.z *= 0.7;
+            d.angVel.multiplyScalar(0.6);
+            if (Math.abs(d.velocity.y) > 4) spawnDecal(d.mesh.position.x, d.mesh.position.z, 0.4, 0x141210);
+        }
+        d.life -= dt;
+        d.mesh.material.emissiveIntensity = Math.max(0, d.life * 0.4); // cooling metal
+        d.mesh.scale.setScalar(d.baseScale * Math.min(1, d.life * 1.4));
+        if (d.life <= 0) { d.active = false; d.mesh.visible = false; }
     }
 }
 
@@ -3565,8 +2485,9 @@ function setHealthSprite(sprite, ratio, color) {
     sprite.fg.position.x = -(sprite.baseWidth * (1 - ratio)) / 2;
 }
 
-// ============================= MINIMAP =============================
+// ============================= MINIMAP / RADAR =============================
 const MINIMAP_RANGE = 130;
+let radarSweep = 0;
 function updateMinimap(playerRef, enemyList) {
     const ctx = minimapCtx;
     const S = 140, C = S / 2;
@@ -3577,6 +2498,30 @@ function updateMinimap(playerRef, enemyList) {
     ctx.beginPath(); ctx.arc(C, C, C - 4, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.arc(C, C, (C - 4) * 0.5, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(C, 4); ctx.lineTo(C, S - 4); ctx.moveTo(4, C); ctx.lineTo(S - 4, C); ctx.strokeStyle = 'rgba(79,209,197,0.12)'; ctx.stroke();
+    // rotating sensor sweep (fading wedge — works everywhere, no conic gradient needed)
+    radarSweep += 0.045;
+    ctx.save();
+    ctx.translate(C, C);
+    ctx.rotate(radarSweep);
+    for (let w = 0; w < 5; w++) {
+        ctx.strokeStyle = `rgba(79,209,197,${0.28 - w * 0.055})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(-w * 0.08) * (C - 5), Math.sin(-w * 0.08) * (C - 5));
+        ctx.stroke();
+    }
+    ctx.restore();
+    // terrain echoes: hard cover paints as faint returns
+    ctx.fillStyle = 'rgba(147,163,160,0.30)';
+    for (let i = 0; i < obstacles.length; i++) {
+        const o = obstacles[i];
+        if (!o.blocksProjectiles) continue;
+        const dx = (o.x - playerRef.position.x) / MINIMAP_RANGE * (C - 6);
+        const dz = (o.z - playerRef.position.z) / MINIMAP_RANGE * (C - 6);
+        if (dx * dx + dz * dz > (C - 6) * (C - 6)) continue;
+        ctx.fillRect(C + dx - 1, C + dz - 1, 2, 2);
+    }
     // enemies
     for (let i = 0; i < enemyList.length; i++) {
         const e = enemyList[i];
@@ -3600,6 +2545,99 @@ function updateMinimap(playerRef, enemyList) {
     ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(-5, 5); ctx.closePath();
     ctx.fill();
     ctx.restore();
+}
+
+// ============================= POV TELEMETRY / SCANNER / COMPASS =============================
+// Live digital readings streamed to the HUD as the frame advances: grid
+// position, velocity, heading + pitch, reactor/hull state, and a hostile
+// scanner with range + bearing to the nearest contact.
+const CARDINALS = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
+function headingDeg(playerRef) {
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(playerRef.group.quaternion);
+    return (Math.atan2(fwd.x, -fwd.z) * 180 / Math.PI + 360) % 360;
+}
+function updateTelemetry(playerRef, enemyList) {
+    if (cameraMode !== 'first') return;
+    const hdg = headingDeg(playerRef);
+    const vel = Math.hypot(playerRef.velocity.x, playerRef.velocity.z);
+    const eye = playerRef.position.y + FIRST_PERSON_EYE_HEIGHT;
+    const horiz = Math.hypot(aimTarget.x - playerRef.position.x, aimTarget.z - playerRef.position.z);
+    const pitch = -Math.atan2(eye, Math.max(1, horiz)) * 180 / Math.PI; // depression angle to the aim point
+    const sx = (playerRef.position.x >= 0 ? '+' : '') + playerRef.position.x.toFixed(1);
+    const sz = (playerRef.position.z >= 0 ? '+' : '') + playerRef.position.z.toFixed(1);
+    document.getElementById('tele-grid').innerHTML = `GRID <b>${sx} / ${sz}</b>`;
+    document.getElementById('tele-vel').innerHTML = `VEL <b>${vel.toFixed(1)}</b> M/S &nbsp; ALT <b>${(playerRef.position.y).toFixed(1)}</b> M`;
+    document.getElementById('tele-hdg').innerHTML = `HDG <b>${String(Math.round(hdg)).padStart(3, '0')}°</b> &nbsp; PITCH <b>${pitch >= 0 ? '+' : ''}${pitch.toFixed(0)}°</b>`;
+    document.getElementById('tele-sys').innerHTML = `SYS <b>REACTOR ${Math.round(playerRef.neural)}% · HULL ${Math.round(Math.max(0, playerRef.health))}% · HEAT ${Math.round(playerRef.heat)}%</b>`;
+
+    // hostile scanner
+    let nearest = null, nd = Infinity;
+    for (let i = 0; i < enemyList.length; i++) {
+        const d = enemyList[i].position.distanceTo(playerRef.position);
+        if (d < nd) { nd = d; nearest = enemyList[i]; }
+    }
+    if (nearest) {
+        const to = new THREE.Vector3().subVectors(nearest.position, playerRef.position);
+        const brg = (Math.atan2(to.x, -to.z) * 180 / Math.PI + 360) % 360;
+        document.getElementById('tele-scan').innerHTML = `SCAN <b>${nearest.isBoss ? 'SOVEREIGN' : 'HOSTILE'} ${nd.toFixed(0)}M BRG ${String(Math.round(brg)).padStart(3, '0')}°</b>`;
+        document.getElementById('scan-count').innerText = `CONTACTS: ${String(enemyList.length).padStart(2, '0')}`;
+        document.getElementById('scan-near').innerText = `NEAREST: ${nd.toFixed(0)}M @ ${String(Math.round(brg)).padStart(3, '0')}°`;
+        const lockEl = document.getElementById('scan-lock');
+        const locked = enemyList.some(e => e.radarLocked && e.state === 'ATTACK');
+        lockEl.innerText = locked ? 'SENSOR: HOSTILE LOCK' : 'SENSOR: SWEEP';
+        lockEl.classList.toggle('lock', locked);
+    } else {
+        document.getElementById('tele-scan').innerHTML = `SCAN <b>NO CONTACTS</b>`;
+        document.getElementById('scan-count').innerText = 'CONTACTS: 00';
+        document.getElementById('scan-near').innerText = 'NEAREST: ---';
+        const lockEl = document.getElementById('scan-lock');
+        lockEl.innerText = 'SENSOR: SWEEP';
+        lockEl.classList.remove('lock');
+    }
+
+    // compass ribbon
+    if (compassCtx) {
+        const W = 360, H = 34, cx = W / 2;
+        const ctx2 = compassCtx;
+        ctx2.clearRect(0, 0, W, H);
+        ctx2.font = '10px "Space Mono", monospace';
+        ctx2.textAlign = 'center';
+        const pxPerDeg = 3;
+        for (let d = -60; d <= 60; d += 5) {
+            let deg = ((hdg + d) % 360 + 360) % 360;
+            const x = cx + d * pxPerDeg;
+            const major = deg % 45 === 0;
+            const mid = deg % 15 === 0;
+            ctx2.strokeStyle = major ? '#ff7a1a' : 'rgba(79,209,197,0.55)';
+            ctx2.lineWidth = major ? 2 : 1;
+            ctx2.beginPath();
+            ctx2.moveTo(x, H - 4);
+            ctx2.lineTo(x, H - (major ? 16 : (mid ? 11 : 7)));
+            ctx2.stroke();
+            if (major) {
+                ctx2.fillStyle = '#ff7a1a';
+                ctx2.fillText(CARDINALS[deg] || String(deg), x, 11);
+            }
+        }
+        // hostile bearing blips on the ribbon
+        ctx2.fillStyle = '#ef4444';
+        for (let i = 0; i < enemyList.length; i++) {
+            const to = new THREE.Vector3().subVectors(enemyList[i].position, playerRef.position);
+            const brg = (Math.atan2(to.x, -to.z) * 180 / Math.PI + 360) % 360;
+            let rel = ((brg - hdg + 540) % 360) - 180;
+            if (Math.abs(rel) <= 60) {
+                ctx2.beginPath();
+                ctx2.arc(cx + rel * pxPerDeg, H - 22, 2.5, 0, Math.PI * 2);
+                ctx2.fill();
+            }
+        }
+        // center marker
+        ctx2.strokeStyle = '#eef4f2';
+        ctx2.lineWidth = 1.5;
+        ctx2.beginPath();
+        ctx2.moveTo(cx, 2); ctx2.lineTo(cx, H - 2);
+        ctx2.stroke();
+    }
 }
 
 // ============================= PLAYER: SENTINEL SNT-01 =============================
@@ -3673,12 +2711,25 @@ class Player {
             this.model = rig;
         }
 
+        // ---- SENSOR ARRAY: ghost replicas projected ahead of the frame.
+        // Semi-transparent phase echoes that pace the SENTINEL like forward
+        // scanner drones — visible in 3rd person AND in HUD POV. The prime
+        // frame keeps its full material; only the ghosts run phase-shifted.
+        this.ghosts = [];
+        this.buildGhosts();
+
+        // ---- HELM LAMP: spotlight at helmet level, aimed dead ahead. Lights
+        // dark fronts and doubles as a cutting laser on anything in the beam.
+        this.buildLamp();
+
         scene.add(this.group);
 
         this.position = this.group.position;
         this.velocity = new THREE.Vector3();
-        this.speed = 22;
-        this.radius = 1.9;
+        this.speed = 24;
+        this.radius = 2.4;
+        this.laserTick = 0;
+        this.ghostTime = Math.random() * 10;
 
         this.maxHealth = 100;
         this.health = 100;
@@ -3699,6 +2750,149 @@ class Player {
         this.dashTimer = 0;
     }
 
+    buildGhosts() {
+        const spread = PLAYER_TARGET_HEIGHT * 1.55;
+        const forward = -PLAYER_TARGET_HEIGHT * 2.2;
+        const offsets = [
+            new THREE.Vector3(-spread, 0, forward),
+            new THREE.Vector3(spread, 0, forward)
+        ];
+        offsets.forEach((off, gi) => {
+            let wrapper = null, model = null, mixer = null;
+            if (sentinelGLB && sentinelNaturalInfo) {
+                const inst = instantiateModel(sentinelGLB, sentinelNaturalInfo, PLAYER_TARGET_HEIGHT);
+                wrapper = inst.wrapper;
+                model = inst.model;
+                wrapper.rotation.y = 0;
+                if (sentinelAnimations && sentinelAnimations.length > 0) {
+                    mixer = new THREE.AnimationMixer(model);
+                    const clip = findClipLoose(sentinelAnimations, ['idle', 'walk', 'run', 'move']) || sentinelAnimations[0];
+                    const act = mixer.clipAction(clip);
+                    act.play();
+                    act.time = gi * 0.14; // slight phase offset — echo feel
+                }
+            } else if (this.model) {
+                model = this.model.clone();
+                wrapper = new THREE.Group();
+                wrapper.add(model);
+            }
+            if (!wrapper || !model) return;
+            // ghost shader treatment: transparent, cyan-shifted, no shadows
+            const ghostMats = [];
+            const ghostColor = new THREE.Color(0x4fd1c5);
+            model.traverse((n) => {
+                if (n.isMesh || n.isSkinnedMesh) {
+                    const wasArray = Array.isArray(n.material);
+                    const mats = wasArray ? n.material : [n.material];
+                    const cloned = mats.map(m => {
+                        const c = m.clone();
+                        c.transparent = true;
+                        c.opacity = 0.22;
+                        c.depthWrite = false;
+                        if (c.map) c.map = null; // pure hologram, no albedo
+                        if (c.color) c.color.copy(ghostColor).multiplyScalar(0.7);
+                        if (c.emissive) { c.emissive.setHex(0x4fd1c5); c.emissiveIntensity = 0.7; }
+                        c.needsUpdate = true;
+                        ghostMats.push(c);
+                        return c;
+                    });
+                    n.material = wasArray ? cloned : cloned[0];
+                    n.castShadow = false;
+                    n.receiveShadow = false;
+                }
+            });
+            wrapper.position.copy(off);
+            this.group.add(wrapper);
+            this.ghosts.push({ wrapper, mixer, mats: ghostMats, phase: gi * Math.PI, baseY: 0 });
+        });
+    }
+
+    setGhostsVisible(v) {
+        this.ghosts.forEach(g => { g.wrapper.visible = v; });
+    }
+
+    buildLamp() {
+        const headY = PLAYER_TARGET_HEIGHT * 0.90; // helmet level
+        this.lamp = new THREE.SpotLight(0xfff1cf, 0, 280, 0.30, 0.45, 1.1);
+        this.lamp.position.set(0, headY, -0.8);
+        this.lampTarget = new THREE.Object3D();
+        this.lampTarget.position.set(0, headY * 0.55, -110);
+        this.group.add(this.lampTarget);
+        this.lamp.target = this.lampTarget;
+        this.group.add(this.lamp);
+
+        // visible volumetric cone
+        const coneGeo = new THREE.CylinderGeometry(0.14, 8.5, 120, 12, 1, true);
+        coneGeo.translate(0, -60, 0);
+        coneGeo.rotateX(Math.PI / 2); // -Y (beam) maps onto -Z (forward)
+        this.lampCone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({
+            color: 0xffe4a8, transparent: true, opacity: 0.05,
+            blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+        }));
+        this.lampCone.position.set(0, headY, -0.8);
+        this.lampCone.visible = false;
+        this.group.add(this.lampCone);
+
+        // hot laser core down the beam axis
+        const coreGeo = new THREE.CylinderGeometry(0.09, 0.09, 180, 6, 1, true);
+        coreGeo.translate(0, -90, 0);
+        coreGeo.rotateX(Math.PI / 2);
+        this.lampCore = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({
+            color: 0xffb347, transparent: true, opacity: 0.55,
+            blending: THREE.AdditiveBlending, depthWrite: false
+        }));
+        this.lampCore.position.set(0, headY, -0.8);
+        this.lampCore.visible = false;
+        this.group.add(this.lampCore);
+    }
+
+    setLamp(on) {
+        this.lamp.intensity = on ? 5.0 : 0;
+        this.lampCone.visible = on;
+        this.lampCore.visible = on;
+        if (on) AudioSys.ui();
+    }
+
+    // beam physics: anything caught in the helm laser takes continuous burn
+    updateLampLaser(dt, activeEnemies) {
+        if (!lampOn) return;
+        this.laserTick -= dt;
+        // flicker the core so it reads as live energy
+        this.lampCore.material.opacity = 0.45 + Math.random() * 0.2;
+        if (this.laserTick > 0) return;
+        this.laserTick = 0.12;
+        const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.group.quaternion);
+        const headPos = this.position.clone(); headPos.y += PLAYER_TARGET_HEIGHT * 0.9;
+        for (let i = 0; i < activeEnemies.length; i++) {
+            const e = activeEnemies[i];
+            const to = new THREE.Vector3().subVectors(e.position, headPos);
+            const proj = to.dot(fwd);
+            if (proj < 4 || proj > 180) continue;
+            const perp = to.clone().addScaledVector(fwd, -proj).length();
+            if (perp < e.radius * 0.9) {
+                e.takeDamage(2.2); // burn tick
+                emitParticles(e.position.clone().add(new THREE.Vector3(0, e.hoverHeight, 0)), 0xffb347, 3, 7, 'spark');
+            }
+        }
+    }
+
+    updateGhosts(dt) {
+        this.ghostTime += dt;
+        for (let i = 0; i < this.ghosts.length; i++) {
+            const g = this.ghosts[i];
+            if (!g.wrapper.visible) continue;
+            if (g.mixer) {
+                // pace the echoes to the prime frame's locomotion
+                if (this.baseAction) g.mixer.timeScale = this.baseAction.timeScale || 1;
+                g.mixer.update(dt);
+            }
+            // phase-shimmer opacity + gentle hover — reads as projected sensor holograms
+            const pulse = 0.14 + 0.10 * (0.5 + 0.5 * Math.sin(this.ghostTime * 2.6 + g.phase));
+            for (let m = 0; m < g.mats.length; m++) g.mats[m].opacity = pulse;
+            g.wrapper.position.y = g.baseY + Math.sin(this.ghostTime * 1.7 + g.phase) * 0.25;
+        }
+    }
+
     ventHeat() {
         if (this.ventLock > 0 || this.heat <= 1 || this.overheated) return;
         this.heat = 0;
@@ -3711,9 +2905,15 @@ class Player {
         if (this.health <= 0) return;
 
         if (this.mixer) this.mixer.update(dt);
+        this.updateGhosts(dt);
 
-        raycaster.setFromCamera(mouse, camera);
-        raycaster.ray.intersectPlane(mousePlane, aimTarget);
+        if (padState.aimActive) {
+            // right stick steers the aim point around the frame
+            aimTarget.set(this.position.x + padState.aim.x * 70, 0, this.position.z + padState.aim.y * 70);
+        } else {
+            raycaster.setFromCamera(mouse, camera);
+            raycaster.ray.intersectPlane(mousePlane, aimTarget);
+        }
 
         const lookAtPos = new THREE.Vector3(aimTarget.x, this.position.y, aimTarget.z);
         this.group.lookAt(lookAtPos);
@@ -3724,9 +2924,12 @@ class Player {
             if (keys.s) inputDir.z += 1;
             if (keys.a) inputDir.x -= 1;
             if (keys.d) inputDir.x += 1;
+            // analog channels: touch joystick / device tilt / gamepad left stick
+            inputDir.x += touchMove.x + padState.move.x;
+            inputDir.z += touchMove.y + padState.move.y;
         }
-        const isMoving = inputDir.lengthSq() > 0;
-        if (isMoving) inputDir.normalize();
+        const isMoving = inputDir.lengthSq() > 0.001;
+        if (inputDir.lengthSq() > 1) inputDir.normalize(); // preserve analog magnitude below full tilt
 
         // ---- Procedural animation layer 1: playback speed follows locomotion
         if (this.baseAction) {
@@ -3744,8 +2947,10 @@ class Player {
             spawnDecal(this.position.x, this.position.z, 1.4, 0x1a1a1a);
         }
 
-        // drive burst
-        if (keys.shift && keys.w && this.dashCooldown <= 0 && this.neural >= 30 && !this.isDashing) {
+        // drive burst — keyboard combo, BURST touch button, or gamepad LB
+        const dashWanted = (keys.shift && keys.w) || mobileDashRequest;
+        mobileDashRequest = false;
+        if (dashWanted && this.dashCooldown <= 0 && this.neural >= 30 && !this.isDashing) {
             this.isDashing = true;
             this.dashTimer = 0.15;
             this.neural -= 30;
@@ -3757,6 +2962,7 @@ class Player {
             triggerDashFX();
             AudioSys.dash();
             addShake(0.3, 0.15);
+            Haptics.rumble(0.5, 0.9, 130);
             emitParticles(this.position, 0x4fd1c5, 30, 26);
         }
 
@@ -3766,6 +2972,8 @@ class Player {
         }
 
         this.position.addScaledVector(this.velocity, dt);
+        // gusts shove an airborne frame; grounded, the servos hold
+        if (!this.isGrounded) this.position.addScaledVector(windNow, dt * 0.06);
 
         if (this.position.y <= 0) {
             if (!this.isGrounded && this.velocity.y < -20) {
@@ -3831,12 +3039,13 @@ class Player {
             shootDir.y = 0;
             if (shootDir.lengthSq() > 0) {
                 shootDir.normalize();
-                const origin = this.position.clone().add(new THREE.Vector3(0, PLAYER_TARGET_HEIGHT * 0.62, 0)).addScaledVector(shootDir, 1.6);
-                fireProjectile(origin, shootDir, 64, true, 10);
-                spawnLaserBeam(origin, origin.clone().addScaledVector(shootDir, 9), 0x4fd1c5);
+                const origin = this.position.clone().add(new THREE.Vector3(0, PLAYER_TARGET_HEIGHT * 0.62, 0)).addScaledVector(shootDir, 2.2);
+                fireProjectile(origin, shootDir, 72, true, 12, 1.25);
+                spawnLaserBeam(origin, origin.clone().addScaledVector(shootDir, 12), 0x4fd1c5);
                 triggerMuzzle(origin);
                 AudioSys.fire();
                 addShake(0.05, 0.06);
+                Haptics.rumble(0.05, 0.3, 40);
                 this.shootCooldown = 0.14;
                 this.recoil = 0.24;
 
@@ -3933,6 +3142,7 @@ class Player {
         flashDamage();
         AudioSys.hurt();
         addShake(0.35, 0.2);
+        Haptics.rumble(0.9, 0.6, 200);
         if (this.health <= 0) gameOver();
     }
 }
@@ -3971,6 +3181,14 @@ class Enemy {
 
         this.radarLocked = false;
         this.bobPhase = Math.random() * Math.PI * 2;
+
+        // fire-control state: 3-round bursts, telegraphed charge shots, orbit strafing
+        this.attackPattern = 0;
+        this.burstShots = 0;
+        this.burstTimer = 0;
+        this.chargeTimer = 0;
+        this.strafeDir = Math.random() < 0.5 ? -1 : 1;
+        this.strafeSwapT = 2 + Math.random() * 3;
     }
 
     buildVisuals(isBoss, tint) {
@@ -4061,16 +3279,20 @@ class Enemy {
             this.buildVisuals(this.isBoss, levelData.enemyTint);
         }
 
-        this.radius = this.isBoss ? 7.5 : 4.2; // hit radius tracks the variant's silhouette
+        this.radius = this.isBoss ? 11.5 : 6.2; // hit radius tracks the upsized silhouette
 
         if (!this.isBoss) resolveObstacleCollisions(this);
         this.active = true;
-        this.health = this.isBoss ? 500 : 30 * (1 + levelData.aiScaling);
+        this.health = this.isBoss ? 560 : 34 * (1 + levelData.aiScaling);
         this.maxHealth = this.health;
         this.attackRateMult = levelData.aiScaling;
         this.state = 'IDLE';
         this.radarLocked = false;
         this.group.visible = true;
+        this.attackPattern = 0;
+        this.burstShots = 0;
+        this.chargeTimer = 0;
+        if (viewMode === 'lidar') applyLidarToObject(this.group, true);
 
         if (this.isBoss) {
             this.speed = 15;
@@ -4134,31 +3356,109 @@ class Enemy {
             }
             this.craft.position.y = this.hoverHeight + Math.sin(Date.now() * 0.008 + this.bobPhase) * (this.hoverHeight * 0.12);
 
-            if (this.attackCooldown <= 0) {
-                dir.normalize();
+            // combat strafing: orbit the frame instead of hanging still
+            this.strafeSwapT -= dt;
+            if (this.strafeSwapT <= 0) { this.strafeDir *= -1; this.strafeSwapT = 2 + Math.random() * 3; }
+            if (dir.lengthSq() > 0.001) {
+                const tangent = new THREE.Vector3(-dir.z, 0, dir.x).normalize().multiplyScalar(this.strafeDir);
+                this.position.addScaledVector(tangent, this.speed * 0.55 * dt);
+                if (!this.isBoss) resolveObstacleCollisions(this);
+            }
+
+            // charge shot in flight: telegraph, then a heavy slug
+            if (this.chargeTimer > 0) {
+                this.chargeTimer -= dt;
+                if (frameCount % 4 === 0) { // pulsing targeting laser during windup
+                    const o = new THREE.Vector3();
+                    this.emitters[0].getWorldPosition(o);
+                    spawnLaserBeam(o, playerRef.position.clone().add(new THREE.Vector3(0, 3, 0)), this.isBoss ? 0xd4b6ff : 0xff8a3c);
+                }
+                if (this.chargeTimer <= 0) this.fireCharged(playerRef);
+            } else if (this.burstShots > 0) {
+                // burst volley in progress
+                this.burstTimer -= dt;
+                if (this.burstTimer <= 0) {
+                    this.burstTimer = 0.13;
+                    this.burstShots--;
+                    this.fireVolley(playerRef);
+                }
+            } else if (this.attackCooldown <= 0) {
+                this.attackPattern++;
                 if (this.isBoss) {
-                    for (let i = 0; i < 8; i++) {
-                        const angle = (i / 8) * Math.PI * 2;
-                        const bossDir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
-                        fireProjectile(this.position.clone().add(new THREE.Vector3(0, 5, 0)), bossDir, 20 + (this.attackRateMult * 10), false, 12);
+                    const mode = this.attackPattern % 3;
+                    if (mode === 0) {
+                        // radial ring
+                        for (let i = 0; i < 10; i++) {
+                            const angle = (i / 10) * Math.PI * 2;
+                            const bossDir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+                            fireProjectile(this.position.clone().add(new THREE.Vector3(0, 6, 0)), bossDir, 24 + (this.attackRateMult * 10), false, 12, 1.4);
+                        }
+                        this.attackCooldown = 1.6;
+                    } else if (mode === 1) {
+                        // aimed 5-shot fan with lead
+                        const lead = this.leadDir(playerRef, 34);
+                        for (let i = -2; i <= 2; i++) {
+                            const fan = lead.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), i * 0.14);
+                            fireProjectile(this.position.clone().add(new THREE.Vector3(0, 6, 0)), fan, 34, false, 10, 1.2);
+                        }
+                        AudioSys.fire();
+                        this.attackCooldown = 1.3;
+                    } else {
+                        this.chargeTimer = 0.8; // sovereign lance windup
+                        this.attackCooldown = 2.4;
                     }
-                    this.attackCooldown = 1.5;
                 } else {
-                    for (let i = 0; i < this.emitters.length; i++) {
-                        const origin = new THREE.Vector3();
-                        this.emitters[i].getWorldPosition(origin);
-                        const toPlayer = new THREE.Vector3().subVectors(playerRef.position, origin);
-                        toPlayer.y = 0;
-                        fireProjectile(origin, toPlayer, 28 + (this.attackRateMult * 18), false, 8);
-                        spawnLaserBeam(origin, origin.clone().addScaledVector(toPlayer.normalize(), 70), 0xef4444);
+                    // fighters: every 4th attack charges; otherwise 3-round predictive burst
+                    if (this.attackPattern % 4 === 3) {
+                        this.chargeTimer = 0.65;
+                        this.emitters.forEach(em => { if (em.children[0]) em.children[0].scale.setScalar(2.2); });
+                        this.attackCooldown = 2.8 - this.attackRateMult;
+                    } else {
+                        this.burstShots = 2 + Math.round(this.attackRateMult * 1.5); // 2 rounds on Front I, 3 by the summit
+                        this.burstTimer = 0;
+                        this.attackCooldown = 2.2 - this.attackRateMult;
                     }
-                    this.attackCooldown = 2.0 - this.attackRateMult;
                 }
             }
         }
 
         if (this.attackCooldown > 0) this.attackCooldown -= dt;
         if (!this.isBoss) setHealthSprite(this.healthSprite, this.health / this.maxHealth, 0xff7a1a);
+    }
+
+    // predictive fire control: aim where the frame will be, not where it is
+    leadDir(playerRef, projSpeed) {
+        const dist = this.position.distanceTo(playerRef.position);
+        const t = Math.min(1.6, dist / projSpeed) * 0.85;
+        const predicted = playerRef.position.clone().addScaledVector(playerRef.velocity, t);
+        const d = predicted.sub(this.position);
+        d.y = 0;
+        return d.lengthSq() > 0.001 ? d.normalize() : new THREE.Vector3(0, 0, 1);
+    }
+
+    fireVolley(playerRef) {
+        const speed = 32 + (this.attackRateMult * 20);
+        for (let i = 0; i < this.emitters.length; i++) {
+            const origin = new THREE.Vector3();
+            this.emitters[i].getWorldPosition(origin);
+            const lead = this.leadDir(playerRef, speed);
+            lead.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.09); // spread
+            fireProjectile(origin, lead, speed, false, 8);
+            spawnLaserBeam(origin, origin.clone().addScaledVector(lead, 80), 0xef4444);
+        }
+        AudioSys.fire();
+    }
+
+    fireCharged(playerRef) {
+        const origin = new THREE.Vector3();
+        this.emitters[0].getWorldPosition(origin);
+        const lead = this.leadDir(playerRef, 28);
+        fireProjectile(origin, lead, 28, false, this.isBoss ? 26 : 18, this.isBoss ? 3.2 : 2.4);
+        spawnLaserBeam(origin, origin.clone().addScaledVector(lead, 120), this.isBoss ? 0xd4b6ff : 0xff5a1a);
+        emitParticles(origin, this.isBoss ? 0xd4b6ff : 0xff8a3c, 12, 12, 'spark');
+        AudioSys.explosion();
+        addShake(0.12, 0.12);
+        this.emitters.forEach(em => { if (em.children[0]) em.children[0].scale.setScalar(1); });
     }
 
     takeDamage(amount) {
@@ -4193,9 +3493,11 @@ class Enemy {
         emitParticles(this.position.clone().add(new THREE.Vector3(0, this.hoverHeight, 0)), 0xff7a1a, 34, 20);
         emitParticles(this.position.clone().add(new THREE.Vector3(0, this.hoverHeight, 0)), 0xffe0a0, 16, 26, 'spark');
         spawnDecal(this.position.x, this.position.z, this.isBoss ? 4 : 2, 0x0a0a0a);
+        spawnDebris(this.position.clone().add(new THREE.Vector3(0, this.hoverHeight, 0)), 0x2a2126, this.isBoss ? 14 : 7, this.isBoss ? 26 : 17);
         if (this.isBoss) AudioSys.bossDown(); else AudioSys.explosion();
         hitStop = this.isBoss ? 0.14 : 0.05;
         addShake(this.isBoss ? 0.6 : 0.2, this.isBoss ? 0.5 : 0.2);
+        Haptics.rumble(this.isBoss ? 1.0 : 0.35, this.isBoss ? 1.0 : 0.55, this.isBoss ? 450 : 110);
 
         const points = this.isBoss ? 5000 : 100;
         score += points;
@@ -4326,11 +3628,21 @@ function startGame() {
     player.health = player.maxHealth;
     player.neural = player.maxNeural;
     player.group.visible = true;
+    player.setLamp(lampOn);                 // carry helm-lamp state across redeploys
+    player.setGhostsVisible(sensorArrayOn); // carry sensor-array state
+    if (viewMode === 'lidar') applyLidarToObject(player.group, true);
+
+    document.getElementById('hud-select').classList.remove('hidden');
 
     cameraMode = 'third';
     camera.fov = THIRD_PERSON_FOV;
     camera.updateProjectionMatrix();
     if (cameraModeLabel) cameraModeLabel.innerText = '3RD PERSON';
+    const camV = document.getElementById('tog-cam-v');
+    if (camV) camV.innerText = '3RD';
+    if (telemetryEl) telemetryEl.classList.add('hidden');
+    if (scannerEl) scannerEl.classList.add('hidden');
+    if (compassEl) compassEl.classList.add('hidden');
     if (player.model) player.model.visible = true;
 
     score = 0;
@@ -4364,12 +3676,22 @@ function togglePause() {
     }
 }
 
+function hideCombatHUD() {
+    uiLayer.classList.add('hidden');
+    document.getElementById('hud-select').classList.add('hidden');
+    if (telemetryEl) telemetryEl.classList.add('hidden');
+    if (scannerEl) scannerEl.classList.add('hidden');
+    if (compassEl) compassEl.classList.add('hidden');
+}
+
 function gameOver() {
     currentState = GAME_STATE.GAMEOVER;
     AudioSys.stopAmbient();
     AudioSys.explosion();
+    Haptics.rumble(1.0, 1.0, 500);
+    spawnDebris(player.position.clone().add(new THREE.Vector3(0, 3, 0)), 0x1c2226, 12, 22);
     player.group.visible = false;
-    uiLayer.classList.add('hidden');
+    hideCombatHUD();
     gameOverScreen.classList.remove('hidden');
     document.getElementById('end-title').innerText = 'FRAME LOST';
     document.getElementById('end-title').style.color = 'var(--danger)';
@@ -4383,7 +3705,7 @@ function endGame(titleStr) {
     AudioSys.stopAmbient();
     AudioSys.sting();
     player.group.visible = false;
-    uiLayer.classList.add('hidden');
+    hideCombatHUD();
     gameOverScreen.classList.remove('hidden');
     document.getElementById('end-title').innerText = titleStr;
     document.getElementById('end-title').style.color = 'var(--amber)';
@@ -4392,10 +3714,10 @@ function endGame(titleStr) {
     document.getElementById('end-kills').innerText = totalKills;
 }
 
-document.getElementById('start-btn').addEventListener('click', startGame);
-document.getElementById('restart-btn').addEventListener('click', startGame);
-document.getElementById('resume-btn').addEventListener('click', togglePause);
-document.getElementById('quit-btn').addEventListener('click', () => {
+bindMenuButton('start-btn', startGame);
+bindMenuButton('restart-btn', startGame);
+bindMenuButton('resume-btn', togglePause);
+bindMenuButton('quit-btn', () => {
     pauseScreen.classList.add('hidden');
     gameOver();
 });
@@ -4427,9 +3749,13 @@ function gameLoop(time) {
         dt *= 0.18;
     }
 
+    pollGamepad();
+    updateWind(dt);
     updateLasers(dt);
     updateMuzzle(dt);
     updateDecals(dt);
+    updateDebris(dt);
+    updateAurora(dt);
     if (player) updateWeather(dt, player.position);
 
     if (currentState === GAME_STATE.INTERMISSION) {
@@ -4447,10 +3773,13 @@ function gameLoop(time) {
 
     player.update(dt);
     spawnEnemyRoutine(dt);
+    updateEnvEmitters(dt, player.position);
 
     const activeEnemies = enemies.filter(e => e.active);
     activeEnemies.forEach(e => e.update(dt, player));
+    player.updateLampLaser(dt, activeEnemies);
     updateMinimap(player, activeEnemies);
+    if (frameCount % 3 === 0) updateTelemetry(player, activeEnemies);
 
     const activeProj = projPool.getActive();
     for (let i = 0; i < activeProj.length; i++) {
@@ -4507,6 +3836,7 @@ function gameLoop(time) {
     for (let i = 0; i < activeParticles.length; i++) {
         const p = activeParticles[i];
         p.mesh.position.addScaledVector(p.velocity, dt);
+        if (p.type !== 'spark') p.mesh.position.addScaledVector(windNow, dt * 0.3); // wind carries dust and smoke
         p.velocity.y -= (p.type === 'spark' ? 24 : 14) * dt;
         p.life -= dt * 2.0;
 
@@ -4533,20 +3863,62 @@ function menuLoop(time) {
     const t = time * 0.00010;
     camera.position.set(Math.sin(t) * 110, 48, Math.cos(t) * 110);
     camera.lookAt(0, 8, 0);
+    updateWind(1 / 60);
     updateWeather(1 / 60, camera.position);
+    updateAurora(1 / 60);
     renderScene();
 }
 menuAnimId = requestAnimationFrame(menuLoop);
 
 // audio unlocks on the first gesture
-document.getElementById('enter-btn').addEventListener('click', () => {
-    AudioSys.init();
-    AudioSys.resume();
-    AudioSys.ui();
-    AudioSys.setAmbient(LEVELS[0].ambientSound); // menu bed starts now that audio is unlocked
-    BGM.start(); // sentinel.mp3 if present -- takes over the bed on success
+// ============================= BOOT DIAGNOSTICS =============================
+// If anything throws during load or inside a button handler, paint it on
+// screen — no devtools needed on a phone to see why a screen won't advance.
+window.addEventListener('error', (e) => {
+    try {
+        let bar = document.getElementById('boot-err');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'boot-err';
+            bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:rgba(120,10,10,0.92);color:#ffd9d9;font:11px "Space Mono",monospace;padding:6px 10px;pointer-events:none;';
+            document.body.appendChild(bar);
+        }
+        bar.textContent = 'SYS FAULT: ' + (e.message || e.error || 'unknown');
+    } catch (_) {}
+});
+
+// Menu buttons respond to both click and touch — some webviews synthesize
+// clicks unreliably; touchend fires everywhere. Guarded against double-fire.
+function bindMenuButton(id, fn) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let lastFire = 0;
+    const go = (e) => {
+        const now = performance.now();
+        if (now - lastFire < 350) return; // swallow the synthetic click after touchend
+        lastFire = now;
+        if (e && e.cancelable) e.preventDefault();
+        fn();
+    };
+    el.addEventListener('click', go);
+    el.addEventListener('touchend', go, { passive: false });
+}
+
+// audio unlocks on the first gesture — but the screen transition comes FIRST
+// and audio boot is fully fenced, so a hostile audio environment (webview,
+// autoplay lockdown, missing Audio constructor) can never freeze the splash.
+bindMenuButton('enter-btn', () => {
     document.getElementById('splash-screen').classList.add('hidden');
     document.getElementById('start-screen').classList.remove('hidden');
+    try {
+        AudioSys.init();
+        AudioSys.resume();
+        AudioSys.ui();
+        AudioSys.setAmbient(LEVELS[0].ambientSound); // menu bed starts now that audio is unlocked
+    } catch (err) { console.warn('[SENTINEL] Audio boot skipped.', err); }
+    try {
+        BGM.start(); // sentinel.mp3 if present -- takes over the bed on success
+    } catch (err) { console.warn('[SENTINEL] BGM unavailable.', err); }
 });
 </script>
 </body>
